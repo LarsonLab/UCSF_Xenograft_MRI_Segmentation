@@ -1,1 +1,1 @@
-# UCSF_Prostate_Segmentation
+# UCSF-Prostate-Segmentation
