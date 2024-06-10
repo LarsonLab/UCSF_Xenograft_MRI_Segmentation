@@ -116,10 +116,10 @@ def dataset_visualization(images,masks):
     cont_bool = True 
     counter = 0 
     while cont_bool == True and counter < len(images): 
+        print(f'Training Example #{counter}')
         fig, axes = plt.subplots(2,1,figsize=(15,15))
         axes[0].imshow(images[counter],cmap='gray')
         axes[1].imshow(masks[counter],cmap='gray')
-        plt.set_title(f'Training example #{counter}')
         plt.show()
         cont_state = int(input('Type 1 to continue or 0 to exit: '))
         if cont_state == 1: 
