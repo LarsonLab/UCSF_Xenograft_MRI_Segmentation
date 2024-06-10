@@ -13,7 +13,8 @@ from PIL import Image
 import matplotlib.pyplot as plt 
 import os 
 from statistics import mean 
-from torch_r2udense import r2udensenet
+from architectures.torch_r2udense import r2udensenet
+from architectures.torch_unet import UNet
 from data2D_ucsf_1d import load_train_data, load_test_data
 import sklearn 
 from torchvision.transforms import v2
@@ -111,6 +112,22 @@ def sanity_check(images,masks):
 
     plt.show()
 
+def dataset_visualization(images,masks): 
+    cont_bool = True 
+    counter = 0 
+    while cont_bool == True and counter < len(images): 
+        fig, axes = plt.subplots(2,1,figsize=(15,15))
+        axes[0].imshow(images[counter],cmap='gray')
+        axes[1].imshow(masks[counter],cmap='gray')
+        plt.set_title(f'Training example #{counter}')
+        plt.show()
+        cont_state = int(input('Type 1 to continue or 0 to exit: '))
+        if cont_state == 1: 
+            counter += 1
+            continue 
+        else:
+            cont_state = False 
+
 def normalization(data): 
     data_mean = np.mean(data)
     data_std = np.std(data)
@@ -157,7 +174,7 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     sanity_check(x_train,y_train)
 
 
-    #transform = torchvision.transforms.ToTensor()
+    #transform = torchvision.transforms.
 
     for i in range(0,len(x_train)-1):
         im = x_train[i]
@@ -181,6 +198,7 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     y_test_tensor = torch.stack(y_test_tensor)
 
     print(x_train_tensor.shape)
+    print(y_train_tensor.shape)
 
     train_dataset = data.TensorDataset(x_train_tensor,y_train_tensor)
     test_dataset = data.TensorDataset(x_test_tensor,y_test_tensor)
@@ -275,8 +293,10 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
         ax.set_title(col)
     index=0
     for i,batch in enumerate(data_loader): 
-        img = batch[0].to(device)
-        msk = batch[1].to(device)
+        img = batch[0].float()
+        img = img.to(device)
+        msk = batch[1].float()
+        msk = msk.to(device)
         output = model(img)
 
         for j in range(batch[0].size()[0]):
@@ -312,6 +332,9 @@ num_epochs = 50
 results = train('run1',model,optimizer,criterion,
                 spec_loss,train_loader,val_loader,device,
                 num_epochs=num_epochs,clear_mem=True)
+
+visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
+
 
 
 
