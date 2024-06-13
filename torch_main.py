@@ -24,10 +24,12 @@ from sklearn.metrics import roc_auc_score
 import datetime
 import random 
 import random 
+import pdb 
 
 
 
 #sanity check metrics and directories 
+debug = False
 file_no_mask = 0 
 maskless_files = []
 mask_no_file = 0 
@@ -41,7 +43,7 @@ msk_dimensions = []
 
 n_files = 0 
 densenet_weights_path = '/home/henry/UCSF_Prostate_Segmentation/densenet_weights'
-
+plots_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/'
 
 #metrics 
 composite_loss = []
@@ -107,6 +109,8 @@ def sanity_check(images,masks):
     fig, axes = plt.subplots(nrows=4,ncols=2,figsize=(15,15))
     for i in range(0,4): 
         rand = np.random.randint(0,len(images)-1)
+        print(f'loaded images dim: {images[rand].shape}')
+        print(f'loaded masks dim: {masks[rand].shape}')
         axes[i,0].imshow(images[rand],cmap='gray')
         axes[i,1].imshow(masks[rand],cmap='gray')
 
@@ -134,6 +138,29 @@ def normalization(data):
     data_normalized = (data - data_mean)/data_std
     return data_normalized
 
+class torch_loader(data.Dataset): 
+
+    def __init__(self,inputs,transform=None): 
+        self.inputs = inputs
+        self.transform = transform 
+        self.input_dtype = torch.float32
+        self.target_dtype = torch.float32
+
+    def __len__(self): 
+        return len(self.inputs)
+    
+    def __getitem__(self,index): 
+        image_array, mask_array = self.inputs[0]
+        x = torch.from_numpy(np.transpose((np.array(image_array)),(2,0,1))).type(self.input_dtype)
+        y = torch.from_numpy(np.transpose((np.array(mask_array)),(2,0,1))).type(self.target_dtype)
+
+        if self.transform is not None: 
+            x = self.transform(x)
+            y = self.transform(y)
+
+        return x, y
+
+
 
 
 
@@ -158,6 +185,7 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     if positive_bool: 
         x_train, y_train = positives_only(x_train,y_train)
         x_test,y_test = positives_only(x_test,y_test)
+
         
     if augmentation_bool: 
         for i in range(0,len(x_train)-1): 
@@ -170,44 +198,20 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
                 y_train[i] = aug_mask
             else: 
                 pass 
-    
-    sanity_check(x_train,y_train)
+    y_test = np.expand_dims(np.array(y_test),axis=-1)
 
+    train_loader_data = [(x_train[i],y_train[i])for i in range(len(x_train)-1)]
+    test_loader_data = [(x_test[i],y_test[i])for i in range(len(x_test)-1)]
+    train_data = torch_loader(train_loader_data)
+    test_data = torch_loader(test_loader_data)
 
-    #transform = torchvision.transforms.
-
-    for i in range(0,len(x_train)-1):
-        im = x_train[i]
-        im = torch.from_numpy(np.resize(im, (1,128,128))).type(dtype)       
-        x_train_tensor.append(im)
-        mask = y_train[i]
-        mask = torch.from_numpy(np.resize(mask, (1,128,128))).type(dtype)
-        y_train_tensor.append(mask)
-
-    for i in range(0,len(x_test)-1):
-        im = x_test[i]
-        im = torch.from_numpy(np.resize(im, (1,128,128))).type(dtype)       
-        x_test_tensor.append(im)
-        mask = y_test[i]
-        mask = torch.from_numpy(np.resize(mask, (1,128,128))).type(dtype)
-        y_test_tensor.append(mask)
-        
-    x_train_tensor = torch.stack(x_train_tensor)
-    y_train_tensor = torch.stack(y_train_tensor)
-    x_test_tensor = torch.stack(x_test_tensor)
-    y_test_tensor = torch.stack(y_test_tensor)
-
-    print(x_train_tensor.shape)
-    print(y_train_tensor.shape)
-
-    train_dataset = data.TensorDataset(x_train_tensor,y_train_tensor)
-    test_dataset = data.TensorDataset(x_test_tensor,y_test_tensor)
-
-    return train_dataset, test_dataset
-
-#defining train and val loaders 
+    return train_data,test_data
+ 
 def train_val_loader(train_dataset, val_amount,batch_size): 
     validation_length = int(val_amount * len(train_dataset))
+    remainder = validation_length % batch_size
+    if remainder != 0: 
+        validation_length - remainder
     train_set,val_set = data.random_split(train_dataset,[len(train_dataset)-validation_length,validation_length])
 
     train_loader = data.DataLoader(dataset=train_set,batch_size=batch_size,shuffle=True)
@@ -219,7 +223,6 @@ def train_val_loader(train_dataset, val_amount,batch_size):
 
 def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader,device,num_epochs,clear_mem=True):
 
-
     torch.cuda.empty_cache() 
     print('Model sent to '+str(device))
     model.to(device)
@@ -227,8 +230,7 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
     train_scores = []
     iters = 0
     for epoch in range(num_epochs): 
-        if epoch %5 == 0: 
-            print(f"Epoch {epoch+1} / {num_epochs}")
+        print(f"Epoch {epoch+1} / {num_epochs}")
         for i, batch in enumerate(train_loader): 
             img = batch[0].float()
             img = img.to(device)
@@ -250,20 +252,24 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
     val_preds = []
     val_labels = []
 
-    for i, batch in enumerate(val_loader): 
-        img = batch[0].float()
-        img = img.to(device)
-        msk = batch[1].float()
-        msk = msk.to(device)
-        val_labels.append(msk)
-        output = model(img)
-        val_preds.append(output)
-        loss = criterion(output,msk)
-        #need to fill this in with the loss function 
-        val_scores.append(spec_loss(output.detach(),msk))
-        val_scores.append(loss.item())
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader): 
+            torch.cuda.empty_cache()
+            img = batch[0].float()
+            img = img.to(device)
+            msk = batch[1].float()
+            msk = msk.to(device)
+            optimizer.zero_grad()
+            val_labels.append(msk)
+            output = model(img)
+            val_preds.append(output)
+            loss = criterion(output,msk)
+            #need to fill this in with the loss function 
+            val_scores.append(spec_loss(output.detach(),msk))
+            val_scores.append(loss.item())
 
-    auroc = roc_auc_score(val_labels.cpu().numpy(),val_preds.cpu().numpy()[:,1])
+    torch.cuda.empty_cache()
+
 
     results = {
         'model_name' : model_name,
@@ -271,7 +277,6 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
         'train_scores': train_scores,
         'val_losses': val_losses,
         'val_scores': val_scores, 
-        'roc_auc_score': auroc
 
     }
     save_path = save_model_weights_path(densenet_weights_path,f'{num_epochs}')
@@ -286,54 +291,57 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
     return results 
 
 
-def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
-    fig, axs = plt.subplots(nrows=num_samples,ncols=3,figsize=(60,60))
-    for ax, col in zip(axs[0],['MRI','Ground Truth',
-                               'Predicted Mask']):
+def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'): 
+    fig, axes = plt.subplots(num_samples,3,figsize=(15,15))
+    num_samples_count = 0 
+    for ax, col in zip(axes[0],['MRI','Ground Truth','Predicted Mask']): 
         ax.set_title(col)
     index=0
-    for i,batch in enumerate(data_loader): 
+    model.eval()
+    for i, batch in enumerate(data_loader): 
+        print(i)
         img = batch[0].float()
         img = img.to(device)
         msk = batch[1].float()
         msk = msk.to(device)
         output = model(img)
-
-        for j in range(batch[0].size()[0]):
-            axs[index,0].imshow(np.transpose(img[j].detach().cpu().numpy(),
-                (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
-            axs[index,1].imshow(np.transpose(img[j].detach().cpu().numpy(),
-                (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
-            axs[index,1].imshow(torch.squeeze(msk[j]).detach().cpu().numpy(),
-                                cmap='Blues',interpolation='none',alpha=0.5)
-            axs[index,2].imshow(np.transpose(img[j].detach().cpu().numpy(),
-                (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
-            axs[index,2].imshow(torch.squeeze(output[j]).detach().cpu().numpy(),
-                                cmap='Greens',interpolation='none',alpha=0.5)
-            
-            index += 1
-        
-        if index >= num_samples: 
+        if i % 15 == 0: 
+            axes[num_samples_count,0].imshow(torch.squeeze(img[0],dim=0).detach().cpu().numpy(),
+                            cmap='gray',interpolation='none')
+            axes[num_samples_count,1].imshow(torch.squeeze(msk[0],dim=0).detach().cpu().numpy(),
+                            cmap='gray',interpolation='none')
+            axes[num_samples_count,2].imshow(torch.squeeze(output[0],dim=0).detach().cpu().numpy(),
+                            cmap='gray',interpolation='none')
+            num_samples_count += 1
+        if num_samples_count >= (num_samples)-1:
             break
 
     plt.tight_layout()
+    current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    plt.savefig(f'{plots_save_path}{current_time}')
+
+
 
 train_set,test_set = generate_dataset(positive_bool=True,augmentation_bool=False,
                                       augmentation_prob=None,val_size=0.1)
 train_loader,val_loader = train_val_loader(train_set,0.2,batch_size=2)
+visualization_loader,forget = train_val_loader(train_set,0.2,batch_size=2)
 
 
 model = r2udensenet()
 spec_loss = torch.nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
-criterion = BCE_dice_loss
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-num_epochs = 50 
+criterion = torch.nn.BCEWithLogitsLoss()
+if debug: 
+    device = 'cpu'
+else: 
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+num_epochs = 2
 results = train('run1',model,optimizer,criterion,
                 spec_loss,train_loader,val_loader,device,
                 num_epochs=num_epochs,clear_mem=True)
 
-visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
+visualize_segmentation(model,val_loader,num_samples=5,device=device)
 
 
 
