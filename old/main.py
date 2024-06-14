@@ -5,16 +5,16 @@
 import os
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-from UCSF_Prostate_Segmentation.old.metrics import dice_coef
+from metrics import dice_coef
 import tensorflow as tf
-from UCSF_Prostate_Segmentation.old.plot import save_plots
-from UCSF_Prostate_Segmentation.old.r2udensenet_1d import r2udensenet
+from plot import save_plots
+from r2udensenet_1d import r2udensenet
 '''from dense_unet import denseunet
 from unet import unet_model
 from res_unet import resunet
 from new_r2unet import r2unet'''
 from scipy import io as sio
-from UCSF_Prostate_Segmentation.old.data2D_ucsf_1d import load_train_data, load_test_data
+from data2D_ucsf_1d import load_train_data, load_test_data
 from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger
 from keras.models import Model
 import tensorflow as tf
@@ -127,7 +127,7 @@ def train(bool_load_weights = False):
     
     date = None
     log_directory_main,log_directory_test= return_directories(date)
-    kfold = KFold(n_splits = 5, shuffle = True, random_state = 1)
+    kfold = KFold(n_splits = 1, shuffle = True, random_state = 1)
     # batch size
     # batch_s = 1
     # pdb.set_trace()
@@ -371,7 +371,7 @@ def train(bool_load_weights = False):
         history = model.fit_generator(
             train_generator,
             steps_per_epoch = len(trainData)/2, # '/2' = bactch size
-            epochs = 2, #25
+            epochs = 3, #25
             verbose = 1,
             validation_data = validation_generator,
             validation_steps = len(validationData)/2 , # 26 should be num validation data / batchsize
@@ -423,13 +423,13 @@ def train(bool_load_weights = False):
         for file in filepath:
             if file.endswith('hdf5'):
                 epoch.append(file)
-        print(epoch[0])
-        #find average rates
-        for i in history.epoch:
+        
+      
+        for i in range(len(history.epoch)):
          
          for j in range(3):
-          image_data = validationData[0]
-          ground_truth_data = validationMask[0]
+          image_data = validationData[j]
+          ground_truth_data = validationMask[j]
 
           model.load_weights(os.path.join(weight_dir,epoch[i]))
           predict = model.predict(np.expand_dims(image_data,axis=0))[0]
@@ -445,7 +445,8 @@ def train(bool_load_weights = False):
           plt.imshow(image_data,cmap = 'gray')
           plt.imshow(predict,alpha=0.4)
           plt.title("Predicted Mask Overlay")
-        plt.savefig(f'{out_epochs}/e_'+str(i+1)+'.png')
+        plt.tight_layout()
+        plt.savefig(f'{out_epochs}/e_{i+1}.png')
 
  
         

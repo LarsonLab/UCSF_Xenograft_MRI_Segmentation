@@ -8,7 +8,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from tensorflow.keras.metrics import Precision, Recall, AUC, Accuracy
 from keras.losses import BinaryCrossentropy
-from UCSF_Prostate_Segmentation.old.metrics import dice_coef,dice_loss,IoU,weighted_bce,composite_loss
+from metrics import dice_coef,dice_loss,IoU,weighted_bce,composite_loss
 
 ##
 import os
@@ -57,6 +57,7 @@ def r2udensenet():
     add1 = Add()([conv1add, conv1])
     dense1 = concatenate([add1, conv1], axis=3)
     pool1 = MaxPooling2D(pool_size=(2, 2))(dense1)
+    print(f'pool1:{pool1.shape}')
 
     conv2 = rec_layer(pool1, 64)
     conv2 = rec_layer(conv2, 64)
@@ -64,6 +65,7 @@ def r2udensenet():
     add2 = Add()([conv2add, conv2])
     dense2 = concatenate([add2, conv2], axis=3)
     pool2 = MaxPooling2D(pool_size=(2, 2))(dense2)
+    print(f'pool2:{pool2.shape}')
 
     conv3 = rec_layer(pool2, 128)
     conv3 = rec_layer(conv3, 128)
@@ -71,6 +73,7 @@ def r2udensenet():
     add3 = Add()([conv3add, conv3])
     dense3 = concatenate([add3, conv3], axis=3)
     pool3 = MaxPooling2D(pool_size=(2, 2))(dense3)
+    print(f'pool3:{pool3.shape}')
 
     conv4 = rec_layer(pool3, 256)
     conv4 = rec_layer(conv4, 256)
@@ -79,6 +82,7 @@ def r2udensenet():
     dense4 = concatenate([add4, conv4], axis=3)
     drop4 = Dropout(0.5)(dense4)
     pool4 = MaxPooling2D(pool_size=(2, 2))(dense4)
+    print(f'pool4:{pool4.shape}')
 
     conv5 = rec_layer(pool4, 512)
     conv5 = rec_layer(conv5, 512)
@@ -86,6 +90,7 @@ def r2udensenet():
     add5 = Add()([conv5add, conv5])
     dense5 = concatenate([add5, conv5], axis=3)
     drop5 = Dropout(0.5)(dense5)
+    print(f'drop5:{drop5.shape}')
 
     up6 = concatenate([Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same')(dense5), conv4], axis=3)
     conv6 = rec_layer(up6, 256)
@@ -93,6 +98,7 @@ def r2udensenet():
     conv6add = Conv2D(256, kernel_size=(1, 1), padding='same')(up6)
     add6 = Add()([conv6add, conv6])
     dense6 = concatenate([add6, conv6], axis=3)
+    print(f'dense6:{dense6.shape}')
 
     up7 = concatenate([Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same')(dense6), conv3], axis=3)
     conv7 = rec_layer(up7, 128)
@@ -100,6 +106,7 @@ def r2udensenet():
     conv7add = Conv2D(128, kernel_size=(1, 1), padding='same')(up7)
     add7 = Add()([conv7add, conv7])
     dense7 = concatenate([add7, conv7], axis=3)
+    print(f'dense7:{dense7.shape}')
 
     up8 = concatenate([Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same')(dense7), conv2], axis=3)
     conv8 = rec_layer(up8, 64)
@@ -107,6 +114,7 @@ def r2udensenet():
     conv8add = Conv2D(64, kernel_size=(1, 1), padding='same')(up8)
     add8 = Add()([conv8add, conv8])
     dense8 = concatenate([add8, conv8], axis=3)
+    print(f'dense8:{dense8.shape}')
 
     up9 = concatenate([Conv2DTranspose(32, (2, 2), strides=(2, 2), padding='same')(dense8), conv1], axis=3)
     conv9 = rec_layer(up9, 64)
@@ -114,8 +122,12 @@ def r2udensenet():
     conv9add = Conv2D(64, kernel_size=(1, 1), padding='same')(up9)
     add9 = Add()([conv9add, conv9])
     dense9 = concatenate([add9, conv9], axis=3)
+    print(f'dense9:{dense9.shape}')
+
 
     conv10 = Conv2D(1, (1, 1), activation='sigmoid')(dense9)
+    print(f'conv10:{conv10.shape}')
+
     model = Model(inputs=[inputs], outputs=[conv10])
     #model.summary()
 

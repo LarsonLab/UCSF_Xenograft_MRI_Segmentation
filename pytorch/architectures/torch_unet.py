@@ -1,6 +1,6 @@
 #UNet Architecture 
 import numpy as np 
-import cv2 
+# s
 import torch 
 import torchvision 
 from torchvision import utils as vutils
@@ -58,7 +58,7 @@ class UpConv(nn.Module):
     
 class UNet(nn.Module): 
 
-    def __init__(self,in_channels=3,out_channels=1): 
+    def __init__(self,in_channels=1,out_channels=1): 
         super(UNet,self).__init__()
         self.encoder = nn.ModuleList([
             DownConv(in_channels,64),#128

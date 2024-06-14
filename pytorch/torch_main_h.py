@@ -1,6 +1,6 @@
 import numpy as np 
 import pandas as pd 
-import cv2 
+# import cv2 
 import torch 
 import torchvision
 from torchvision import utils as vutils 
@@ -8,14 +8,13 @@ from torchvision import transforms
 from torch.nn import functional as F 
 from torch.utils import data 
 from torch.optim import SGD, Adam 
-from torch_metrics import dice_loss, BCE, BCE_dice_loss, BCEWithLogitsLoss, IoU
+from torch_metrics import dice_loss 
 from PIL import Image 
 import matplotlib.pyplot as plt 
 import os 
 from statistics import mean 
-from architectures.torch_r2udense import r2udensenet
 from architectures.torch_unet import UNet
-from data2D_ucsf_1d import load_train_data, load_test_data
+from torch_data import load_train_data, load_test_data
 import sklearn 
 from torchvision.transforms import v2
 from sklearn.model_selection import KFold
@@ -40,7 +39,7 @@ img_dimensions = []
 msk_dimensions = []
 
 n_files = 0 
-densenet_weights_path = '/home/henry/UCSF_Prostate_Segmentation/densenet_weights'
+densenet_weights_path = "/data/ernesto/UCSF_Prostate_Segmentation/pytorch/"
 
 
 #metrics 
@@ -110,23 +109,23 @@ def sanity_check(images,masks):
         axes[i,0].imshow(images[rand],cmap='gray')
         axes[i,1].imshow(masks[rand],cmap='gray')
 
-    plt.show()
+    plt.savefig("/data/ernesto/UCSF_Prostate_Segmentation/pytorch/Test.png")
 
-def dataset_visualization(images,masks): 
-    cont_bool = True 
-    counter = 0 
-    while cont_bool == True and counter < len(images): 
-        print(f'Training Example #{counter}')
-        fig, axes = plt.subplots(2,1,figsize=(15,15))
-        axes[0].imshow(images[counter],cmap='gray')
-        axes[1].imshow(masks[counter],cmap='gray')
-        plt.show()
-        cont_state = int(input('Type 1 to continue or 0 to exit: '))
-        if cont_state == 1: 
-            counter += 1
-            continue 
-        else:
-            cont_state = False 
+# def dataset_visualization(images,masks): 
+#     cont_bool = True 
+#     counter = 0 
+#     while cont_bool == True and counter < len(images): 
+#         print(f'Training Example #{counter}')
+#         fig, axes = plt.subplots(2,1,figsize=(15,15))
+#         axes[0].imshow(images[counter],cmap='gray')
+#         axes[1].imshow(masks[counter],cmap='gray')
+#         plt.show()
+#         cont_state = int(input('Type 1 to continue or 0 to exit: '))
+#         if cont_state == 1: 
+#             counter += 1
+#             continue 
+#         else:
+#             cont_state = False 
 
 def normalization(data): 
     data_mean = np.mean(data)
@@ -150,10 +149,20 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     x_train, y_train = load_train_data()
     x_test, y_test = load_test_data()
 
+    print(x_train.shape)
+    print(y_train.shape)    
+    print(x_test.shape)
+    print(y_test.shape)
+
     x_train= normalization(x_train)
     x_test = normalization(x_test)
     y_train = y_train.astype(np.float32) / 255.
     y_test = y_test.astype(np.float32) / 255.
+
+    print(x_train.shape)
+    print(y_train.shape)    
+    print(x_test.shape)
+    print(y_test.shape)
 
     if positive_bool: 
         x_train, y_train = positives_only(x_train,y_train)
@@ -231,6 +240,7 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
             print(f"Epoch {epoch+1} / {num_epochs}")
         for i, batch in enumerate(train_loader): 
             img = batch[0].float()
+            print(img)
             img = img.to(device)
             msk = batch[1].float()
             msk = msk.to(device)
@@ -272,8 +282,8 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
         'val_losses': val_losses,
         'val_scores': val_scores, 
         'roc_auc_score': auroc
-
-    }
+     }
+    
     save_path = save_model_weights_path(densenet_weights_path,f'{num_epochs}')
     torch.save(model.state_dict(),save_path)
 
@@ -286,54 +296,54 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
     return results 
 
 
-def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
-    fig, axs = plt.subplots(nrows=num_samples,ncols=3,figsize=(60,60))
-    for ax, col in zip(axs[0],['MRI','Ground Truth',
-                               'Predicted Mask']):
-        ax.set_title(col)
-    index=0
-    for i,batch in enumerate(data_loader): 
-        img = batch[0].float()
-        img = img.to(device)
-        msk = batch[1].float()
-        msk = msk.to(device)
-        output = model(img)
+# def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
+#     fig, axs = plt.subplots(nrows=num_samples,ncols=3,figsize=(60,60))
+#     for ax, col in zip(axs[0],['MRI','Ground Truth',
+#                                'Predicted Mask']):
+#         ax.set_title(col)
+#     index=0
+#     for i,batch in enumerate(data_loader): 
+#         img = batch[0].float()
+#         img = img.to(device)
+#         msk = batch[1].float()
+#         msk = msk.to(device)
+#         output = model(img)
 
-        for j in range(batch[0].size()[0]):
-            axs[index,0].imshow(np.transpose(img[j].detach().cpu().numpy(),
-                (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
-            axs[index,1].imshow(np.transpose(img[j].detach().cpu().numpy(),
-                (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
-            axs[index,1].imshow(torch.squeeze(msk[j]).detach().cpu().numpy(),
-                                cmap='Blues',interpolation='none',alpha=0.5)
-            axs[index,2].imshow(np.transpose(img[j].detach().cpu().numpy(),
-                (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
-            axs[index,2].imshow(torch.squeeze(output[j]).detach().cpu().numpy(),
-                                cmap='Greens',interpolation='none',alpha=0.5)
+#         for j in range(batch[0].size()[0]):
+#             axs[index,0].imshow(np.transpose(img[j].detach().cpu().numpy(),
+#                 (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
+#             axs[index,1].imshow(np.transpose(img[j].detach().cpu().numpy(),
+#                 (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
+#             axs[index,1].imshow(torch.squeeze(msk[j]).detach().cpu().numpy(),
+#                                 cmap='Blues',interpolation='none',alpha=0.5)
+#             axs[index,2].imshow(np.transpose(img[j].detach().cpu().numpy(),
+#                 (1,2,0)).astype(np.uint8),cmap='bone',interpolation='none')
+#             axs[index,2].imshow(torch.squeeze(output[j]).detach().cpu().numpy(),
+#                                 cmap='Greens',interpolation='none',alpha=0.5)
             
-            index += 1
+#             index += 1
         
-        if index >= num_samples: 
-            break
+#         if index >= num_samples: 
+#             break
 
-    plt.tight_layout()
+#     plt.tight_layout()
 
-train_set,test_set = generate_dataset(positive_bool=True,augmentation_bool=False,
+train_set,test_set = generate_dataset(positive_bool=False,augmentation_bool=False,
                                       augmentation_prob=None,val_size=0.1)
 train_loader,val_loader = train_val_loader(train_set,0.2,batch_size=2)
 
 
-model = r2udensenet()
+model = UNet()
 spec_loss = torch.nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
-criterion = BCE_dice_loss
+criterion = dice_loss
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-num_epochs = 50 
-results = train('run1',model,optimizer,criterion,
+num_epochs = 5
+results = train('test',model,optimizer,criterion,
                 spec_loss,train_loader,val_loader,device,
                 num_epochs=num_epochs,clear_mem=True)
 
-visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
+# visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
 
 
 
@@ -349,7 +359,6 @@ visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
     
 
     
-
 
 
 
