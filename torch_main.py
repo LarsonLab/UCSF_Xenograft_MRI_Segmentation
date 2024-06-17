@@ -13,6 +13,7 @@ from PIL import Image
 import matplotlib.pyplot as plt 
 import os 
 from statistics import mean 
+from torch_metrics import plot_training_scores, plot_validation_scores
 from architectures.torch_r2udense import r2udensenet
 from architectures.torch_unet import UNet
 from data2D_ucsf_1d import load_train_data, load_test_data
@@ -25,6 +26,8 @@ import datetime
 import random 
 import random 
 import pdb 
+import scipy.ndimage as ndi 
+from tqdm import tqdm
 
 
 
@@ -42,8 +45,10 @@ img_dimensions = []
 msk_dimensions = []
 
 n_files = 0 
-densenet_weights_path = '/home/henry/UCSF_Prostate_Segmentation/densenet_weights'
-plots_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/'
+densenet_weights_path = '/home/henry/UCSF_Prostate_Segmentation/Weights/densenet_weights/'
+unet_weights = '/home/henry/UCSF_Prostate_Segmentation/Weights/UNet_weights/'
+plots_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/Inference_results/'
+metrics_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/metrics_plots/'
 
 #metrics 
 composite_loss = []
@@ -116,6 +121,25 @@ def sanity_check(images,masks):
 
     plt.show()
 
+def resize_images(data,new_dim):
+    if data.shape[1] < 4:
+        x_shape = data.shape[2]
+        y_shape = data.shape[3]
+        zoomed_data = np.zeros(data.shape[0],data.shape[1],new_dim,new_dim)
+        zoom_factor = (1,(new_dim / x_shape),(new_dim / y_shape))
+    else: 
+        x_shape = data.shape[1]
+        y_shape = data.shape[2]
+        zoomed_data = np.zeros((data.shape[0],new_dim,new_dim,data.shape[3]))
+        zoom_factor = ((new_dim / x_shape),(new_dim / y_shape),1)
+    counter = 0 
+    for image in tqdm(data,desc='Resizing Data',unit='images'): 
+        new_image = ndi.zoom(image,zoom_factor,order=4)
+        zoomed_data[counter] = new_image
+        counter += 1
+    return zoomed_data
+
+
 def dataset_visualization(images,masks): 
     cont_bool = True 
     counter = 0 
@@ -168,19 +192,23 @@ class torch_loader(data.Dataset):
 #check that this returns the same datatype and the same shape as the one that worked with the other network 
 def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size): 
 
-    x_train_tensor = []
-    y_train_tensor = []
-    x_test_tensor = []
-    y_test_tensor = []
     dtype = torch.float64
 
     x_train, y_train = load_train_data()
     x_test, y_test = load_test_data()
+    y_test = np.expand_dims(np.array(y_test),axis=-1)
+    print('entering resizing')
+    x_train = resize_images(x_train,256)
+    y_train = resize_images(y_train,256)
+    x_test = resize_images(x_test,256)
+    y_test = resize_images(y_test,256)
+
 
     x_train= normalization(x_train)
     x_test = normalization(x_test)
     y_train = y_train.astype(np.float32) / 255.
     y_test = y_test.astype(np.float32) / 255.
+
 
     if positive_bool: 
         x_train, y_train = positives_only(x_train,y_train)
@@ -198,7 +226,6 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
                 y_train[i] = aug_mask
             else: 
                 pass 
-    y_test = np.expand_dims(np.array(y_test),axis=-1)
 
     train_loader_data = [(x_train[i],y_train[i])for i in range(len(x_train)-1)]
     test_loader_data = [(x_test[i],y_test[i])for i in range(len(x_test)-1)]
@@ -215,7 +242,7 @@ def train_val_loader(train_dataset, val_amount,batch_size):
     train_set,val_set = data.random_split(train_dataset,[len(train_dataset)-validation_length,validation_length])
 
     train_loader = data.DataLoader(dataset=train_set,batch_size=batch_size,shuffle=True)
-    val_loader = data.DataLoader(dataset=val_set,batch_size=batch_size,shuffle=False)
+    val_loader = data.DataLoader(dataset=val_set,batch_size=batch_size,shuffle=True)
 
     return train_loader,val_loader
 
@@ -231,19 +258,19 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
     iters = 0
     for epoch in range(num_epochs): 
         print(f"Epoch {epoch+1} / {num_epochs}")
+        model.train()
         for i, batch in enumerate(train_loader): 
-            img = batch[0].float()
-            img = img.to(device)
-            msk = batch[1].float()
-            msk = msk.to(device)
+            img = batch[0].float().to(device)
+            msk = batch[1].float().to(device)
             optimizer.zero_grad()
             output = model(img)
             loss = criterion(output,msk)
+            print(f'Epoch {epoch}/{num_epochs} BCE with Logits Loss: {loss}')
             loss.backward()
             optimizer.step()
             losses.append(loss.item())
             #need to fill this in with the loss function
-            train_scores.append(spec_loss(output.detach(),msk))
+            #train_scores.append(spec_loss(output.detach(),msk))
             iters += 1
 
     model.eval()
@@ -324,24 +351,27 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
 
 train_set,test_set = generate_dataset(positive_bool=True,augmentation_bool=False,
                                       augmentation_prob=None,val_size=0.1)
+exit()
 train_loader,val_loader = train_val_loader(train_set,0.2,batch_size=2)
 visualization_loader,forget = train_val_loader(train_set,0.2,batch_size=2)
 
 
 model = r2udensenet()
 spec_loss = torch.nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(),lr=0.02)
 criterion = torch.nn.BCEWithLogitsLoss()
 if debug: 
     device = 'cpu'
 else: 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-num_epochs = 2
+num_epochs = 100
 results = train('run1',model,optimizer,criterion,
                 spec_loss,train_loader,val_loader,device,
                 num_epochs=num_epochs,clear_mem=True)
 
 visualize_segmentation(model,val_loader,num_samples=5,device=device)
+plot_training_scores(results['train_scores'],results['train_scores'],metrics_save_path)
+plot_validation_scores(results['val_scores'],results['val_losses'],metrics_save_path)
 
 
 
