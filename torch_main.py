@@ -118,10 +118,10 @@ def sanity_check(images,masks):
         print(f'loaded masks dim: {masks[rand].shape}')
         axes[i,0].imshow(images[rand],cmap='gray')
         axes[i,1].imshow(masks[rand],cmap='gray')
-
+    plt.savefig(f'/home/henry/UCSF_Prostate_Segmentation/Data_plots/Sanity_checks/densenet.png')
     plt.show()
 
-def resize_images(data,new_dim):
+def resize_images(data,new_dim,interpolation_order):
     if data.shape[1] < 4:
         x_shape = data.shape[2]
         y_shape = data.shape[3]
@@ -134,7 +134,7 @@ def resize_images(data,new_dim):
         zoom_factor = ((new_dim / x_shape),(new_dim / y_shape),1)
     counter = 0 
     for image in tqdm(data,desc='Resizing Data',unit='images'): 
-        new_image = ndi.zoom(image,zoom_factor,order=4)
+        new_image = ndi.zoom(image,zoom_factor,order=interpolation_order)
         zoomed_data[counter] = new_image
         counter += 1
     return zoomed_data
@@ -198,16 +198,18 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     x_test, y_test = load_test_data()
     y_test = np.expand_dims(np.array(y_test),axis=-1)
     print('entering resizing')
-    x_train = resize_images(x_train,256)
-    y_train = resize_images(y_train,256)
-    x_test = resize_images(x_test,256)
-    y_test = resize_images(y_test,256)
+    x_train = resize_images(x_train,256,4)
+    y_train = resize_images(y_train,256,0)
+    x_test = resize_images(x_test,256,4)
+    y_test = resize_images(y_test,256,0)
 
 
     x_train= normalization(x_train)
     x_test = normalization(x_test)
     y_train = y_train.astype(np.float32) / 255.
     y_test = y_test.astype(np.float32) / 255.
+
+    sanity_check(x_train,y_train)
 
 
     if positive_bool: 
@@ -265,7 +267,7 @@ def train(model_name,model,optimizer,criterion,spec_loss,train_loader,val_loader
             optimizer.zero_grad()
             output = model(img)
             loss = criterion(output,msk)
-            print(f'Epoch {epoch}/{num_epochs} BCE with Logits Loss: {loss}')
+            print(f'Epoch {epoch+1}/{num_epochs} BCE with Logits Loss: {loss}')
             loss.backward()
             optimizer.step()
             losses.append(loss.item())
@@ -332,7 +334,7 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
         msk = batch[1].float()
         msk = msk.to(device)
         output = model(img)
-        if i % 15 == 0: 
+        if i % 35 == 0: 
             axes[num_samples_count,0].imshow(torch.squeeze(img[0],dim=0).detach().cpu().numpy(),
                             cmap='gray',interpolation='none')
             axes[num_samples_count,1].imshow(torch.squeeze(msk[0],dim=0).detach().cpu().numpy(),
@@ -351,20 +353,20 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
 
 train_set,test_set = generate_dataset(positive_bool=True,augmentation_bool=False,
                                       augmentation_prob=None,val_size=0.1)
-exit()
 train_loader,val_loader = train_val_loader(train_set,0.2,batch_size=2)
 visualization_loader,forget = train_val_loader(train_set,0.2,batch_size=2)
 
 
 model = r2udensenet()
+model_name = 'r2udensenet'
 spec_loss = torch.nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(model.parameters(),lr=0.02)
+optimizer = torch.optim.Adam(model.parameters(),lr=1e-5)
 criterion = torch.nn.BCEWithLogitsLoss()
 if debug: 
     device = 'cpu'
 else: 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-num_epochs = 100
+num_epochs = 50
 results = train('run1',model,optimizer,criterion,
                 spec_loss,train_loader,val_loader,device,
                 num_epochs=num_epochs,clear_mem=True)
