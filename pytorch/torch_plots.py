@@ -1,7 +1,7 @@
 import os
 import matplotlib.pyplot as plt
 
-def save_plots(epoch_num,all_train_dice_loss,all_val_dice_loss,out_dir):
+def save_plots(all_train_dice_loss,all_val_dice_loss,out_dir):
  plt.style.use('ggplot')
 
  #DICE LOSS
@@ -20,4 +20,4 @@ def save_plots(epoch_num,all_train_dice_loss,all_val_dice_loss,out_dir):
  plt.xlabel('Epochs')
  plt.ylabel('Dice Loss')
  plt.legend()
- plt.savefig(f'{out_dir}/Dice_Loss_{epoch_num}.png')
+ plt.savefig(f'{out_dir}/Dice_Loss.png')
