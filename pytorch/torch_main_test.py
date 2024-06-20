@@ -114,7 +114,7 @@ def sanity_check(images,masks):
     plt.savefig("/data/ernesto/UCSF_Prostate_Segmentation/pytorch/test1")
 
 def directories():
-   log_directory_main ='.log'
+   log_directory_main ='Log'
    log_directory_test = os.path.join(log_directory_main + "/Test")
    
    if not os.path.exists(log_directory_main):
@@ -123,6 +123,7 @@ def directories():
     print(f'Directory created: {log_directory_main}')    
    else:
     print("Directory Exist")
+
    if not os.path.exists(log_directory_test):
     print("DOESN'T EXIST")
     os.makedirs(log_directory_test)
@@ -130,7 +131,7 @@ def directories():
    else:
     print("Directory Exist") 
  
-    return log_directory_main,log_directory_test
+   return log_directory_main,log_directory_test
 
 def dataset_visualization(images,masks): 
     cont_bool = True 
@@ -182,12 +183,6 @@ class torch_loader(data.Dataset):
 #check that this returns the same datatype and the same shape as the one that worked with the other network 
 def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size): 
 
-    # images_train_tensor = []
-    # mask_train_tensor = []
-    # images_test_tensor = []
-    # mask_test_tensor = []
-    # dtype = torch.float64
-
     images_train, mask_train = load_train_data()
     images_test, mask_test = load_test_data()
 
@@ -226,45 +221,11 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
 
     train_loader_data = [(images_train[i],mask_train[i])for i in range(len(images_train)-1)]
     test_loader_data = [(images_test[i],mask_test[i])for i in range(len(images_test)-1)]
-    # print(train_loader_data.shape)
-    # print(test_loader_data.shape)
+  
     train_data = torch_loader(train_loader_data)
     test_data = torch_loader(test_loader_data)
 
     return train_data,test_data
- 
-
-
-    #transform = torchvision.transforms.
-
-    # for i in range(0,len(images_train)-1):
-    #     im = images_train[i]
-    #     im = torch.from_numpy(np.resize(im, (1,128,128))).type(dtype)       
-    #     images_train_tensor.append(im)
-    #     mask = mask_train[i]
-    #     mask = torch.from_numpy(np.resize(mask, (1,128,128))).type(dtype)
-    #     mask_train_tensor.append(mask)
-
-    # for i in range(0,len(images_test)-1):
-    #     im = images_test[i]
-    #     im = torch.from_numpy(np.resize(im, (1,128,128))).type(dtype)       
-    #     images_test_tensor.append(im)
-    #     mask = mask_test[i]
-    #     mask = torch.from_numpy(np.resize(mask, (1,128,128))).type(dtype)
-    #     mask_test_tensor.append(mask)
-        
-    # images_train_tensor = torch.stack(images_train_tensor)
-    # mask_train_tensor = torch.stack(mask_train_tensor)
-    # images_test_tensor = torch.stack(images_test_tensor)
-    # mask_test_tensor = torch.stack(mask_test_tensor)
-
-    # print(images_train_tensor.shape)
-    # print(mask_train_tensor.shape)
-
-    # train_dataset = data.TensorDataset(images_train_tensor,mask_train_tensor)
-    # test_dataset = data.TensorDataset(images_test_tensor,mask_test_tensor)
-
-    # return train_dataset, test_dataset
 
 #defining train and val loaders 
 def loaders(train_dataset, val_amount,batch_size): 
@@ -278,15 +239,6 @@ def loaders(train_dataset, val_amount,batch_size):
     val_loader = data.DataLoader(dataset=val_set,batch_size=batch_size,shuffle=False)
 
     return train_loader,val_loader
-
-   #  validation_length = int(val_amount * len(train_dataset))
-    # train_set,val_set = data.random_split(train_dataset,[len(train_dataset)-validation_length,validation_length])
-
-    # train_loader = data.DataLoader(dataset=train_set,batch_size=batch_size,shuffle=True)
-    # val_loader = data.DataLoader(dataset=val_set,batch_size=batch_size,shuffle=False)
-
-    # return train_loader,val_loader
-
 
 def train(model_name, model, optimizer, criterion, train_loader, val_loader, device, num_epochs, clear_mem):
     torch.cuda.empty_cache() 
@@ -342,11 +294,12 @@ def train(model_name, model, optimizer, criterion, train_loader, val_loader, dev
         all_dice_val_losses.append(sum(dice_val_losses) / len(dice_val_losses))
         print(f'Epoch {epoch+1} completed. Train Loss: {all_dice_train_losses[-1]}, Val Loss: {all_dice_val_losses[-1]}')
 
-        plot_dir = log_directory_test + "/plots"
-        if not os.path.exists(plot_dir):
+    plot_dir = os.path.join(log_directory_test, "plots")
+    if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
-        
-        save_plots(
+            print(f"Created plot directory: {plot_dir}")
+
+    save_plots(
             all_dice_train_losses,
             all_dice_val_losses,
             plot_dir
@@ -358,50 +311,11 @@ def train(model_name, model, optimizer, criterion, train_loader, val_loader, dev
             'val_losses': all_dice_val_losses,
         }
     print(results)
-        # torch.cuda.empty_cache() 
-        
-    
-    #     plot_dir = log_directory_test + "/plots"
-    #     print(plot_dir)
-    #     if not os.path.exists(plot_dir):
-    #          os.makedirs(plot_dir)
-    #          print("create")   
-    #          save_plots(
-    #          all_dice_train_losses,
-    #          all_dice_val_losses,
-    #          plot_dir
-    #          )
-       
-    # results = {
-    #         'model_name': model_name,
-    #         'train_losses': all_dice_train_losses,
-    #         'val_losses': all_dice_val_losses,
-    #         }
-    # print(results)
-        
+     
     if clear_mem:
         del model, optimizer, criterion
         torch.cuda.empty_cache()    
     return results
-    # results = {
-    # 'model_name' : model_name,
-    # 'train_losses': all_dice_train_losses,
-    #     # 'train_scores': all_train_scores,
-    # 'val_losses': all_dice_val_losses,
-    #     # 'val_scores': val_scores,
-    # }
-    # print(results)
-
-    # save_path = save_model_weights_path("/data/ernesto/UCSF_Prostate_Segmentation/pytorch",model_name)
-    # torch.save(model.state_dict(),save_path)
-
-    # if clear_mem: 
-    #     del model,optimizer,criterion
-    #     torch.cuda.empty_cache()
-   
-    
-    # return results 
-
 
 def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'): 
     fig, axes = plt.subplots(num_samples,3,figsize=(15,15))
@@ -411,7 +325,7 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
     index=0
     model.eval()
     for i, batch in enumerate(data_loader): 
-        print(i)
+        
         img = batch[0].float()
         img = img.to(device)
         msk = batch[1].float()
@@ -439,7 +353,6 @@ if __name__ == '__main__':
 
  model_name = "test"
  model = UNet()
-#  spec_loss = torch.nn.BCEWithLogitsLoss()
  optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
  criterion = DiceLoss()
  device = torch.device('cuda'if torch.cuda.is_available() else "cpu")
