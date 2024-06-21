@@ -12,7 +12,7 @@ from PIL import Image
 import matplotlib.pyplot as plt 
 import os 
 from statistics import mean 
-# from architectures.torch_r2udense import r2udensenet
+from architectures.torch_r2udense import r2udensenet
 from architectures.torch_unet import UNet
 from Utils.data2D_ucsf_1d import load_train_data, load_test_data
 from Metrics.plot import save_plots2, save_plots3
@@ -352,7 +352,7 @@ def train(model_name, model, optimizer, criterion, train_loader, val_loader, dev
             'val_losses': all_opt_val_losses,
         }
     print(results)
-    save_path = save_model_weights_path(unet_weights_path,f'{num_epochs}')
+    save_path = save_model_weights_path(densenet_weights_path,f'{num_epochs}')
     torch.save(model.state_dict(),save_path)
         
     if clear_mem:
@@ -397,7 +397,7 @@ train_set,test_set = generate_dataset(positive_bool=True,augmentation_bool=True,
 train_loader,val_loader = loaders(train_set,0.2,batch_size=2)
 
 model_name = "test"
-model = UNet()
+model = r2udensenet()
 #  spec_loss = torch.nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(),lr=1e-5)
 criterion = DiceBCELoss()
