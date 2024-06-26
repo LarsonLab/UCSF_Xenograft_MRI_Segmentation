@@ -91,6 +91,117 @@ class TverskyLoss(nn.Module):
         Tversky = (TP + smooth) / (TP + alpha*FP + beta*FN + smooth)  
         
         return 1 - Tversky
+    
+class DiceIouLoss(nn.Module):
+
+    def __init__(self,dice_percent=ALPHA,iou_percent=BETA):
+        super(DiceIouLoss,self).__init__()
+        self.dice_percent = dice_percent
+        self.iou_percent = iou_percent 
+        self.dice_loss = DiceLoss()
+        self.iou_loss = IoULoss()
+
+    def forward(self,inputs,targets):
+        dice_loss = self.dice_loss(inputs,targets)
+        iou_loss = self.iou_loss(inputs,targets)
+        combined_loss = (self.dice_percent * dice_loss) +  (self.iou_percent * iou_loss)
+        return combined_loss 
+    
+    
+
+class TLoss(nn.Module):
+    def __init__(
+        self,
+        image_size: int,
+        device: torch.device,
+        nu: float = 1.0,
+        epsilon: float = 1e-8,
+        reduction: str = "mean",
+    ):
+        """
+        Implementation of the TLoss.
+
+        Args:
+            config: Configuration object for the loss.
+            nu (float): Value of nu.
+            epsilon (float): Value of epsilon.
+            reduction (str): Specifies the reduction to apply to the output: 'none' | 'mean' | 'sum'.
+                             'none': no reduction will be applied,
+                             'mean': the sum of the output will be divided by the number of elements in the output,
+                             'sum': the output will be summed.
+        """
+        super().__init__()
+        self.D = torch.tensor(
+            (image_size * image_size),
+            dtype=torch.float,
+            device=device,
+        )
+ 
+        self.lambdas = torch.ones(
+            (image_size, image_size),
+            dtype=torch.float,
+            device=device,
+        )
+        self.nu = nn.Parameter(
+            torch.tensor(nu, dtype=torch.float, device=device)
+        )
+        self.epsilon = torch.tensor(epsilon, dtype=torch.float, device=device)
+        self.reduction = reduction
+
+    def forward(
+        self, input_tensor: torch.Tensor, target_tensor: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Args:
+            input_tensor (torch.Tensor): Model's prediction, size (B x W x H).
+            target_tensor (torch.Tensor): Ground truth, size (B x W x H).
+
+        Returns:
+            torch.Tensor: Total loss value.
+        """
+
+        delta_i = input_tensor - target_tensor
+        sum_nu_epsilon = torch.exp(self.nu) + self.epsilon
+        first_term = -torch.lgamma((sum_nu_epsilon + self.D) / 2)
+        second_term = torch.lgamma(sum_nu_epsilon / 2)
+        third_term = -0.5 * torch.sum(self.lambdas + self.epsilon)
+        fourth_term = (self.D / 2) * torch.log(torch.tensor(np.pi))
+        fifth_term = (self.D / 2) * (self.nu + self.epsilon)
+
+        delta_squared = torch.pow(delta_i, 2)
+        lambdas_exp = torch.exp(self.lambdas + self.epsilon)
+        numerator = delta_squared * lambdas_exp
+        numerator = torch.sum(numerator, dim=(1, 2))
+
+        fraction = numerator / sum_nu_epsilon
+        sixth_term = ((sum_nu_epsilon + self.D) / 2) * torch.log(1 + fraction)
+
+        total_losses = (
+            first_term
+            + second_term
+            + third_term
+            + fourth_term
+            + fifth_term
+            + sixth_term
+        )
+
+        if self.reduction == "mean":
+            return total_losses.mean()
+        elif self.reduction == "sum":
+            return total_losses.sum()
+        elif self.reduction == "none":
+            return total_losses
+        else:
+            raise ValueError(
+                f"The reduction method '{self.reduction}' is not implemented."
+            )
+
+
+
+
+
+
+
 
 
 
