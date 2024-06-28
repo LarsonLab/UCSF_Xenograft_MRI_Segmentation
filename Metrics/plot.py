@@ -110,7 +110,7 @@ def save_plots(fold_num,train_comp_loss,val_comp_loss,train_dice_coef,val_dice_c
 
 
 def save_plots2(opt_train_loss,opt_val_loss,train_comp_loss,val_comp_loss,train_dice_coef,val_dice_coef,train_iou,val_iou,save_dir):
-    fig, axes = plt.subplots(nrows=4,ncols=2)
+    fig, axes = plt.subplots(nrows=4,ncols=2,figsize=(20,40))
     for ax, col in zip(axes[0],['Train','Validation']):
        ax.set_title(col)
 
@@ -133,7 +133,25 @@ def save_plots2(opt_train_loss,opt_val_loss,train_comp_loss,val_comp_loss,train_
         for j in range(2):  # Iterate over columns
             axes[i,j].set_xlabel(x_label)
             axes[i,j].set_ylabel(y_labels[i])
-            
+
     plt.tight_layout()
     plt.savefig(f'{save_dir}{current_time}.png')
     plt.close()
+
+def save_plots3(all_train_dice_loss,all_val_dice_loss,all_val_ref_loss,loss_name,out_dir):
+ plt.style.use('ggplot')
+
+ #DICE LOSS
+ plt.figure()
+ plt.plot(all_train_dice_loss, label='Train Loss')
+ plt.plot(all_val_dice_loss, label='Validation Loss')
+ plt.plot(all_val_ref_loss,label='Reference Loss')
+ plt.xlabel('Epochs')
+ plt.ylabel('Loss')
+ plt.legend()
+ plt.title(f'Training and Validation {loss_name} Loss vs Reference')
+ plot_path = os.path.join(out_dir, 'loss_plot.png')
+ plt.savefig(f'{out_dir}{current_time}')
+ plt.close()
+ print(f"Plot saved at: {plot_path}")
+ print('done plotting')
