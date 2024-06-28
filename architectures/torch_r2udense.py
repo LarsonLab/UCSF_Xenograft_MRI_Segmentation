@@ -26,7 +26,8 @@ class Convolution(nn.Module):
             nn.Conv2d(in_channels,out_channels,kernel_size=3,stride=1,
                       padding=1,bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=False),
+            nn.Dropout(p=0.2,inplace=False)
         )
 
     def forward(self,x): 
@@ -44,7 +45,8 @@ class Initial_RecLayer(nn.Module):
         self.conv1 = nn.Conv2d(in_channels,out_channels,kernel_size=1,stride=1,padding=0,bias=False)
         self.conv2 = Convolution(out_channels,out_channels)
         self.batch_norm = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=False)
+        self.drop = nn.Dropout2d(p=0.2,inplace=False)
 
 
     def forward(self,x): 
@@ -54,6 +56,7 @@ class Initial_RecLayer(nn.Module):
         reconv2 = self.conv2(add_conv1) #(32,32)
         add_conv2 = self.relu(reconv2 + layer_add) #(32,32)
         reconv3 = self.conv2(add_conv2) #(32,32)
+        reconv3 = self.drop(reconv3)
 
         return reconv3 
     
@@ -65,7 +68,8 @@ class RecLayer(nn.Module):
         self.conv = Convolution(in_channels,in_channels)
         self.conv1 = nn.Conv2d(in_channels,in_channels,kernel_size=1,padding=0,bias=False)
         self.batch_norm = nn.BatchNorm2d(in_channels)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=False)
+        self.drop = nn.Dropout(p=0.2,inplace=False)
 
     def forward(self,x): 
         reconv1 = self.conv(x) #(32,32)
@@ -74,6 +78,7 @@ class RecLayer(nn.Module):
         reconv2 = self.conv(add_conv1)
         add_conv2 = self.relu(reconv2 + layer_add )
         reconv3 = self.conv(add_conv2)
+        reconv3 = self.drop(reconv3)
 
 
         return reconv3
@@ -92,7 +97,7 @@ class DenseBlock(nn.Module):
                                  padding=0,bias=False)
         self.maxpool = nn.MaxPool2d(kernel_size=2,stride=2)
         self.batch_norm = nn.BatchNorm2d(in_channels)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=False)
 
     def forward(self,x): 
         conv1 = self.rec_layer(x)
@@ -114,7 +119,7 @@ class Initial_DenseBlock(nn.Module):
                                  padding=0,bias=False)
         self.maxpool = nn.MaxPool2d(kernel_size=2,stride=2)
         self.batch_norm = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=False)
 
     def forward(self,x): 
         conv1 = self.initial_rec(x) #(1,32)
@@ -135,10 +140,10 @@ class DenseBlock_Drop(nn.Module):
         self.rec_layer = RecLayer(in_channels,in_channels)
         self.conv = nn.Conv2d(in_channels,in_channels,kernel_size=1,stride=1,
                               padding=0,bias=False)
-        self.dropout = nn.Dropout2d(p=0.5,inplace=True)
+        self.dropout = nn.Dropout2d(p=0.5,inplace=False)
         self.maxpool = nn.MaxPool2d(kernel_size=2,stride=2)
         self.batch_norm = nn.BatchNorm2d(in_channels)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=False)
 
     def forward(self,x): 
         conv4 = self.rec_layer(x)
@@ -171,7 +176,7 @@ class BottleNeck(nn.Module):
                               stride = 1, padding=0,bias = False)
         self.dropout = nn.Dropout(p=0.5)
         self.batch_norm = nn.BatchNorm2d(in_channels)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=False)
 
     def forward(self,x): 
         conv5 = self.rec_layer(x)
@@ -193,7 +198,6 @@ class UpDenseBlock(nn.Module):
         self.conv = nn.Conv2d(cat_dim,out_channels,kernel_size=1,
                               stride=1,padding=0,bias = False)
         self.batch_norm = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(inplace=True)
         self.skip_connection = skip_connection 
         
     def forward(self,x,skip_connection): 
@@ -202,7 +206,7 @@ class UpDenseBlock(nn.Module):
         conv6 = self.rec_layer(cat1)
         conv6 = self.rec_layer1(conv6)
         conv6add = self.batch_norm(self.conv(cat1))
-        add6 = self.relu(conv6add + conv6)
+        add6 = conv6add + conv6
         dense6 = torch.cat((add6,conv6),dim=1)
 
         return dense6 
@@ -217,9 +221,9 @@ class OutputConv(nn.Module):
 
     def forward(self,x): 
         conv10 = self.conv(x)
-        output = self.sigmoid(conv10)
+        out10 = self.sigmoid(conv10)
 
-        return output 
+        return conv10
     
 
   
@@ -278,10 +282,6 @@ if(pretrained_weights):
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
 
-model = r2udensenet()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-summary(model, input_size=(1,256, 256))
  
 
 

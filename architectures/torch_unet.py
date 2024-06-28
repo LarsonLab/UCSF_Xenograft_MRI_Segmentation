@@ -12,6 +12,7 @@ from PIL import Image
 import matplotlib.pyplot as plt 
 import os
 from statistics import mean 
+from torchsummary import summary 
 
 class ConvBlock(nn.Module): 
 
@@ -58,7 +59,7 @@ class UpConv(nn.Module):
     
 class UNet(nn.Module): 
 
-    def __init__(self,in_channels=3,out_channels=1): 
+    def __init__(self,in_channels=1,out_channels=1): 
         super(UNet,self).__init__()
         self.encoder = nn.ModuleList([
             DownConv(in_channels,64),#128
@@ -91,3 +92,5 @@ class UNet(nn.Module):
             o = layer(o)
 
         return self.output_conv(o)
+    
+
