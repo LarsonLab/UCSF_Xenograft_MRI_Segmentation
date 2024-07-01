@@ -1,4 +1,4 @@
-#Preprocessing Steps 
+Preprocessing Steps 
 
 1) extract data from hdf5 file using dat2d_ucsf_1d.py script 
 
