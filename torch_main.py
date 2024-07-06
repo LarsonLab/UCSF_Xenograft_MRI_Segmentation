@@ -1,23 +1,27 @@
 import numpy as np 
 import pandas as pd 
-# import cv2 
 import torch 
 import torchvision
 from torchvision import utils as vutils 
 from torchvision import transforms 
+from torchvision.transforms import v2
 from torch.nn import functional as F 
 from torch.utils import data 
-from torch.optim import SGD, Adam 
+from torch.optim import SGD, Adam
+from torch.optim import lr_scheduler as lr_scheduler 
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.nn import PoissonNLLLoss
 from PIL import Image 
 import matplotlib.pyplot as plt 
 import os 
 from statistics import mean 
-from architectures.torch_r2udense import r2udensenet
 from architectures.torch_unet import UNet
+from architectures.Attention_UNet import Attention_UNet
+from architectures.Mamba_Unet import LightMUNet
 from Utils.data2D_ucsf_1d import load_train_data, load_test_data
+from Utils.image_ops import threshold_image
 from Metrics.plot import save_plots2, save_plots3
 import sklearn 
-from torchvision.transforms import v2
 from sklearn.model_selection import KFold
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
@@ -25,10 +29,10 @@ import datetime
 import random 
 from tqdm import tqdm
 import datetime 
-from Metrics.losses import DiceLoss, DiceBCELoss, IoULoss, TverskyLoss 
+from Metrics.losses import DiceLoss, DiceBCELoss, IoULoss, SurfaceLoss
+from Metrics.losses import TverskyLoss
+from testing import run_testing
  
-current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-
 
 #sanity check metrics and directories 
 file_no_mask = 0 
@@ -42,11 +46,15 @@ num_positive_diagnoses = 0
 img_dimensions = []
 msk_dimensions = []
 
+
+#Global Variables 
 n_files = 0 
 unet_weights_path = '/home/henry/UCSF_Prostate_Segmentation/Weights/UNet_weights/'
 densenet_weights_path = '/home/henry/UCSF_Prostate_Segmentation/densenet_weights'
+attention_weights_path = '/home/henry/UCSF_Prostate_Segmentation/Weights/Attention_weights/'
 plots_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/Inference_results/'
 metrics_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/metrics_plots/'
+current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 
 composite_loss = []
@@ -69,7 +77,6 @@ def save_model_weights_path (path,model_name):
     current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     save_path = os.path.join(path,f'{current_time}_#_{model_name}.pth')
     return save_path
-
 
 #random image augmentation 
 def random_augmentation(image,mask): 
@@ -120,6 +127,7 @@ def sanity_check(images,masks):
         axes[i,1].imshow(masks[rand],cmap='gray')
     plt.savefig("/home/henry/UCSF_Prostate_Segmentation/Data_plots/Sanity_checks/check")
 
+
 def directories():
    log_directory_main ='.log'
    log_directory_test = os.path.join(log_directory_main + "/Test")
@@ -138,6 +146,7 @@ def directories():
     print("Directory Exist") 
  
     return log_directory_main,log_directory_test
+   
 
 def dataset_visualization(images,masks): 
     cont_bool = True 
@@ -155,11 +164,13 @@ def dataset_visualization(images,masks):
         else:
             cont_state = False 
 
+
 def normalization(data): 
     data_mean = np.mean(data)
     data_std = np.std(data)
     data_normalized = (data - data_mean)/data_std
     return data_normalized
+
 
 class torch_loader(data.Dataset): 
 
@@ -182,9 +193,9 @@ class torch_loader(data.Dataset):
             y = self.transform(y)
 
         return x, y
+    
 
 def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size): 
-
 
     images_train, mask_train = load_train_data()
     images_test, mask_test = load_test_data()
@@ -193,6 +204,8 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     print(mask_train.shape)    
     print(images_test.shape)
     print(mask_test.shape)
+
+    image_shape = images_train.shape[1]
 
     images_train = normalization(images_train)
     images_test = normalization(images_test)
@@ -216,11 +229,9 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
             else: 
                 pass 
 
-
     mask_test = np.expand_dims(np.array(mask_test),axis=-1)
 
     sanity_check(images_train,mask_train)
-
 
     train_loader_data = [(images_train[i],mask_train[i])for i in range(len(images_train)-1)]
     test_loader_data = [(images_test[i],mask_test[i])for i in range(len(images_test)-1)]
@@ -229,7 +240,7 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     train_data = torch_loader(train_loader_data)
     test_data = torch_loader(test_loader_data)
 
-    return train_data,test_data
+    return train_data,test_data,image_shape
  
 
 
@@ -261,13 +272,14 @@ def loss_computations(image,mask):
 
 
 
-def train(model_name, model, optimizer, criterion, train_loader, val_loader, device, num_epochs, clear_mem):
+def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_loader, val_loader, device, num_epochs, clear_mem):
     torch.cuda.empty_cache() 
     print(f"Using device: {device}")
     print(f'Model sent to {device}')
     model = model.to(device)
     all_opt_train_losses = []
     all_opt_val_losses = []
+    all_iou_val_losses = []
     iters = 0
 
     for epoch in range(num_epochs): 
@@ -297,6 +309,7 @@ def train(model_name, model, optimizer, criterion, train_loader, val_loader, dev
             except Exception as e:
                 print(f"Error during training at iteration {i}: {e}")
         
+        scheduler.step()
         all_opt_train_losses.append(sum(opt_train_losses) / len(opt_train_losses))
 
         model.eval()
@@ -326,23 +339,22 @@ def train(model_name, model, optimizer, criterion, train_loader, val_loader, dev
                     print(f"Error during validation at iteration {i}: {e}")
         
         all_opt_val_losses.append(sum(opt_val_losses) / len(opt_val_losses))
-        print(f'Epoch {epoch+1} completed. Train Loss: {all_opt_train_losses[-1]}, Val Loss: {all_opt_val_losses[-1]}')
+        all_iou_val_losses.append(sum(iou_val_losses)/len(iou_val_losses))
+        print(f'Epoch {epoch+1} completed. Train Loss: {all_opt_train_losses[-1]}, Val Loss: {all_opt_val_losses[-1]}, Dice: {all_iou_val_losses[-1]}')
 
         plot_dir = log_directory_test + "/plots"
         if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
         
-        #save_plots(
-            # all_dice_train_losses,
-            # all_dice_val_losses,
-            # plot_dir
-        #)
+
     save_plots2(opt_train_losses,opt_val_losses,composite_train_losses,composite_val_losses,
                     dice_train_losses,dice_val_losses,iou_train_losses,iou_val_losses,metrics_save_path)
 
     save_plots3(
             all_opt_train_losses,
             all_opt_val_losses,
+            all_iou_val_losses,
+            loss_name,
             metrics_save_path
         )   
        
@@ -352,7 +364,7 @@ def train(model_name, model, optimizer, criterion, train_loader, val_loader, dev
             'val_losses': all_opt_val_losses,
         }
     print(results)
-    save_path = save_model_weights_path(densenet_weights_path,f'{num_epochs}')
+    save_path = save_model_weights_path(attention_weights_path,f'{num_epochs}')
     torch.save(model.state_dict(),save_path)
         
     if clear_mem:
@@ -375,12 +387,12 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
         msk = batch[1].float()
         msk = msk.to(device)
         output = model(img)
-        if i % 70 == 0: 
+        if i % 30 == 0: 
             axes[num_samples_count,0].imshow(torch.squeeze(img[0],dim=0).detach().cpu().numpy(),
                             cmap='gray',interpolation='none')
             axes[num_samples_count,1].imshow(torch.squeeze(msk[0],dim=0).detach().cpu().numpy(),
                             cmap='gray',interpolation='none')
-            axes[num_samples_count,2].imshow(torch.squeeze(output[0],dim=0).detach().cpu().numpy(),
+            axes[num_samples_count,2].imshow(threshold_image(torch.squeeze(output[0],dim=0).detach().cpu().numpy(),0.55),
                             cmap='gray',interpolation='none')
             num_samples_count += 1
         if num_samples_count >= (num_samples)-1:
@@ -392,22 +404,29 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
 
 if __name__ == '__main__':
     log_directory_main,log_directory_test= directories()
-train_set,test_set = generate_dataset(positive_bool=True,augmentation_bool=True,
+train_set,test_set,image_shape = generate_dataset(positive_bool=True,augmentation_bool=True,
                                       augmentation_prob=0.5,val_size=0.1)
 train_loader,val_loader = loaders(train_set,0.2,batch_size=2)
+test_loader, discard = loaders(test_set,0,batch_size=2)
 
-model_name = "test"
-model = r2udensenet()
-#  spec_loss = torch.nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(model.parameters(),lr=1e-5)
-criterion = DiceBCELoss()
+model_name = "Mamba UNet"
+model = LightMUNet()
+num_epochs = 100
+learning_rate = 0.00001
+optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-3)
+lambda1 = lambda epoch: 0.99 ** epoch
+scheduler = lr_scheduler.LambdaLR(optimizer,lr_lambda=lambda1)
+scheduler_name = 'Lambda'
 device = torch.device('cuda'if torch.cuda.is_available() else "cpu")
-num_epochs = 50
-results = train(model_name,model,optimizer,criterion,
-                train_loader,val_loader,device,
+criterion = SurfaceLoss()
+loss_name = 'Boundary Loss'
+results = train(model_name,model,optimizer,scheduler,criterion,
+                loss_name,train_loader,val_loader,device,
                 num_epochs,clear_mem=True)
 
 visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
+run_testing(model_name,model,test_loader,device,num_epochs,clear_mem=False,
+            loss_function=loss_name,lr=learning_rate,scheduler_name=scheduler_name)
 
 
 
