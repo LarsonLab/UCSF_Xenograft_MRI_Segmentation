@@ -29,9 +29,12 @@ import datetime
 import random 
 from tqdm import tqdm
 import datetime 
-from Metrics.losses import DiceLoss, DiceBCELoss, IoULoss, SurfaceLoss
+from Metrics.losses import DiceLoss, DiceBCELoss, IoULoss, TverskyIoULoss
+from Metrics.boundary_loss import BoundaryLoss
 from Metrics.losses import TverskyLoss
 from testing import run_testing
+import schedulefree
+
  
 
 #sanity check metrics and directories 
@@ -52,6 +55,7 @@ n_files = 0
 unet_weights_path = '/home/henry/UCSF_Prostate_Segmentation/Weights/UNet_weights/'
 densenet_weights_path = '/home/henry/UCSF_Prostate_Segmentation/densenet_weights'
 attention_weights_path = '/home/henry/UCSF_Prostate_Segmentation/Weights/Attention_weights/'
+mamba_weights_path = '/home/henry/UCSF_Prostate_Segmentation/Weights/Mamba_weights/'
 plots_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/Inference_results/'
 metrics_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/metrics_plots/'
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -281,11 +285,13 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
     all_opt_val_losses = []
     all_iou_val_losses = []
     iters = 0
+    high_iou = 0 
 
     for epoch in range(num_epochs): 
         print(f"Epoch {epoch+1} / {num_epochs}")
         
-        model.train()  
+        model.train() 
+        optimizer.train() 
         opt_train_losses = []  
         dice_train_losses = []
         composite_train_losses = []
@@ -309,10 +315,11 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
             except Exception as e:
                 print(f"Error during training at iteration {i}: {e}")
         
-        scheduler.step()
+        #scheduler.step()
         all_opt_train_losses.append(sum(opt_train_losses) / len(opt_train_losses))
 
         model.eval()
+        optimizer.eval()
         opt_val_losses = []
         dice_val_losses = []
         dice_val_preds = []
@@ -339,8 +346,11 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
                     print(f"Error during validation at iteration {i}: {e}")
         
         all_opt_val_losses.append(sum(opt_val_losses) / len(opt_val_losses))
-        all_iou_val_losses.append(sum(iou_val_losses)/len(iou_val_losses))
-        print(f'Epoch {epoch+1} completed. Train Loss: {all_opt_train_losses[-1]}, Val Loss: {all_opt_val_losses[-1]}, Dice: {all_iou_val_losses[-1]}')
+        iou_val_loss = sum(iou_val_losses)/len(iou_val_losses)
+        if iou_val_loss > high_iou: 
+            model_dictionary = model.state_dict()
+        all_iou_val_losses.append(iou_val_loss)
+        print(f'Epoch {epoch+1} completed. Train Loss: {all_opt_train_losses[-1]}, Val Loss: {all_opt_val_losses[-1]}, IoU: {all_iou_val_losses[-1]}')
 
         plot_dir = log_directory_test + "/plots"
         if not os.path.exists(plot_dir):
@@ -364,13 +374,12 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
             'val_losses': all_opt_val_losses,
         }
     print(results)
-    save_path = save_model_weights_path(attention_weights_path,f'{num_epochs}')
-    torch.save(model.state_dict(),save_path)
-        
+    save_path = save_model_weights_path(mamba_weights_path,f'{num_epochs}')
+    torch.save(model_dictionary,save_path)
     if clear_mem:
         del model, optimizer, criterion
         torch.cuda.empty_cache()    
-    return results
+    return results, save_path 
 
 
 def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'): 
@@ -409,23 +418,28 @@ train_set,test_set,image_shape = generate_dataset(positive_bool=True,augmentatio
 train_loader,val_loader = loaders(train_set,0.2,batch_size=2)
 test_loader, discard = loaders(test_set,0,batch_size=2)
 
-model_name = "Mamba UNet"
+model_name = "Light Mamba UNet"
 model = LightMUNet()
 num_epochs = 100
-learning_rate = 0.00001
-optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-3)
+learning_rate = 0.0001
+#optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-3)
+optimizer = schedulefree.AdamWScheduleFree(model.parameters(),lr=learning_rate,weight_decay=1e-3)
 lambda1 = lambda epoch: 0.99 ** epoch
-scheduler = lr_scheduler.LambdaLR(optimizer,lr_lambda=lambda1)
-scheduler_name = 'Lambda'
+#scheduler = lr_scheduler.LambdaLR(optimizer,lr_lambda=lambda1)
+scheduler = None
+scheduler_name = 'Schedule Free'
+#device = torch.device('cuda'if torch.cuda.is_available() else "cpu")
 device = torch.device('cuda'if torch.cuda.is_available() else "cpu")
-criterion = SurfaceLoss()
-loss_name = 'Boundary Loss'
-results = train(model_name,model,optimizer,scheduler,criterion,
+criterion = TverskyIoULoss()
+loss_name = 'Tversky Iou Loss'
+# if loss_name == 'Boundary Loss' or loss_name == 'Boundary':
+#     criterion = criterion.to(device)
+results,save_path = train(model_name,model,optimizer,scheduler,criterion,
                 loss_name,train_loader,val_loader,device,
                 num_epochs,clear_mem=True)
 
 visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
-run_testing(model_name,model,test_loader,device,num_epochs,clear_mem=False,
+run_testing(model_name,model,save_path,test_loader,device,num_epochs,clear_mem=False,
             loss_function=loss_name,lr=learning_rate,scheduler_name=scheduler_name)
 
 
@@ -441,4 +455,3 @@ run_testing(model_name,model,test_loader,device,num_epochs,clear_mem=False,
     
     
 
-    
