@@ -1,4 +1,4 @@
-from __future__ import anotations 
+from __future__ import annotations 
 
 import numpy as np 
 import torch 
@@ -10,6 +10,7 @@ from monai.networks.blocks.segresnet_block import ResBlock,get_conv_layer,get_up
 from monai.networks.layers.factories import Dropout 
 from monai.networks.layers.utils import get_act_layer,get_norm_layer
 from monai.utils import UpsampleMode
+import huggingface_hub
 from mamba_ssm import Mamba 
 
 
@@ -145,7 +146,7 @@ class LightMUNet(nn.Module):
             spatial_dims: int = 2,
             init_filters: int = 8,
             in_channels: int = 1,
-            out_channels: int = 2,
+            out_channels: int = 1,
             dropout_prob: float | None = None,
             act: tuple | str = ("RELU",{'inplace':True}),
             norm: tuple | str = ('GROUP',{'num_groups': 8}),
@@ -212,7 +213,7 @@ class LightMUNet(nn.Module):
         )
         n_up = len(blocks_up)
         for i in range(n_up):
-            sample_in_channels = filters * 2 ** (n_up - 1)
+            sample_in_channels = filters * 2 ** (n_up - i)
             up_layers.append(
                 nn.Sequential(
                     *[ResUpBlock(spatial_dims,sample_in_channels//2,norm=norm,act=self.act)
@@ -225,44 +226,42 @@ class LightMUNet(nn.Module):
                       get_upsample_layer(spatial_dims,sample_in_channels // 2, upsample_mode=upsample_mode),]
                 )
             )
-            return up_layers,up_samples 
+        return up_layers,up_samples 
         
     def _make_final_conv(self,out_channels: int): 
         return nn.Sequential(
             get_norm_layer(name=self.norm,spatial_dims=self.spatial_dims,channels=self.init_filters),
             self.act_mod,
-            get_dwconv_layer(self.spatial_dims,self.init_filters,out_channels,kernel_size=1,bias=True)
+            get_dwconv_layer(self.spatial_dims,self.init_filters,out_channels,kernel_size=1,bias=True),
         )
     
-    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor,list[torch.Tensor]]: 
+    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
         x = self.convInit(x)
-        if self.dropout_prob is not None: 
+        if self.dropout_prob is not None:
             x = self.dropout(x)
-
         down_x = []
 
         for down in self.down_layers:
             x = down(x)
             down_x.append(x)
 
-        return x, down_x 
-    
-    def decode(self, x: torch.Tensor,down_x: list[torch.Tensor]) -> torch.Tensor:
-        for i, (up,upl) in enumerate(zip(self.up_samples,self.up_layers)): 
-            x = up(x) + down_x[i+ 1]
+        return x, down_x
+
+    def decode(self, x: torch.Tensor, down_x: list[torch.Tensor]) -> torch.Tensor:
+        for i, (up, upl) in enumerate(zip(self.up_samples, self.up_layers)):
+            x = up(x) + down_x[i + 1]
             x = upl(x)
 
-        if self.use_conv_final: 
+        if self.use_conv_final:
             x = self.conv_final(x)
-        return x 
-    
-    def forward(self,x): 
+        return x
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x, down_x = self.encode(x)
         down_x.reverse()
 
-        x = self.decode(x,down_x)
-        return x 
-
+        x = self.decode(x, down_x)
+        return x
 #to initialize this model in training loop: 
 
 # spatial_dims = 2,
