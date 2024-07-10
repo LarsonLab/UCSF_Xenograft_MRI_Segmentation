@@ -19,7 +19,7 @@ from architectures.torch_unet import UNet
 from architectures.Attention_UNet import Attention_UNet
 from architectures.Mamba_Unet import LightMUNet
 from Utils.data2D_ucsf_1d import load_train_data, load_test_data
-from Utils.image_ops import threshold_image,dist_map_transform
+from Utils.image_ops import threshold_image, dist_map_transform
 from Metrics.plot import save_plots2, save_plots3
 import sklearn 
 from sklearn.model_selection import KFold
@@ -29,11 +29,13 @@ import datetime
 import random 
 from tqdm import tqdm
 import datetime 
-from Metrics.losses import DiceLoss, DiceBCELoss, IoULoss, TverskyIoULoss
+from Metrics.losses import DiceLoss, DiceBCELoss, IoULoss, TverskyIoULoss, BoundaryIoULoss
 from Metrics.boundary_loss import BoundaryLoss
 from Metrics.losses import TverskyLoss
 from testing import run_testing
 import schedulefree
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
  
 
@@ -183,7 +185,6 @@ class torch_loader(data.Dataset):
         self.transform = transform 
         self.input_dtype = torch.float32
         self.target_dtype = torch.float32
-        self.dist_transform = dist_map_transform((1,1),2)
 
     def __len__(self): 
         return len(self.inputs)
@@ -192,13 +193,12 @@ class torch_loader(data.Dataset):
         image_array, mask_array = self.inputs[index]
         x = torch.from_numpy(np.transpose((np.array(image_array)),(2,0,1))).type(self.input_dtype)
         y = torch.from_numpy(np.transpose((np.array(mask_array)),(2,0,1))).type(self.target_dtype)
-        dist_map = self.dist_transform(y)
-        print
+
         if self.transform is not None: 
             x = self.transform(x)
             y = self.transform(y)
 
-        return x, y,dist_map
+        return x, y
     
 
 def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size): 
@@ -206,10 +206,10 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     images_train, mask_train = load_train_data()
     images_test, mask_test = load_test_data()
 
-    print(images_train.shape)
-    print(mask_train.shape)    
-    print(images_test.shape)
-    print(mask_test.shape)
+    print(f'Train images shape: {images_train.shape}')
+    print(f'Train masks shape:{mask_train.shape}')    
+    print(f'Test images shape: {images_test.shape}')
+    print(f'Test masks shape: {mask_test.shape}')
 
     image_shape = images_train.shape[1]
 
@@ -303,7 +303,6 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
             try:
                 img = batch[0].float().to(device)
                 msk = batch[1].float().to(device)
-                dist_map = batch[2].float().to(device)
                 optimizer.zero_grad()
                 output = model(img)
                 loss = criterion(output, msk)
@@ -317,6 +316,7 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
                 iters += 1
             except Exception as e:
                 print(f"Error during training at iteration {i}: {e}")
+                print(e)
         
         #scheduler.step()
         all_opt_train_losses.append(sum(opt_train_losses) / len(opt_train_losses))
@@ -376,8 +376,7 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
             'train_losses': all_opt_train_losses,
             'val_losses': all_opt_val_losses,
         }
-    print(results)
-    #3
+    #print(results)
     save_path = save_model_weights_path(mamba_weights_path,f'{num_epochs}')
     torch.save(model_dictionary,save_path)
     if clear_mem:
@@ -422,9 +421,8 @@ train_set,test_set,image_shape = generate_dataset(positive_bool=True,augmentatio
 train_loader,val_loader = loaders(train_set,0.2,batch_size=2)
 test_loader, discard = loaders(test_set,0,batch_size=2)
 
-#2
-model_name = "Light Mamba UNet"
-model = LightMUNet()
+model_name = "Attention UNet"
+model = Attention_UNet()
 num_epochs = 100
 learning_rate = 0.0001
 #optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-3)
@@ -434,9 +432,9 @@ lambda1 = lambda epoch: 0.99 ** epoch
 scheduler = None
 scheduler_name = 'Schedule Free'
 #device = torch.device('cuda'if torch.cuda.is_available() else "cpu")
-device = torch.device('cuda'if torch.cuda.is_available() else "cpu")
-criterion = TverskyIoULoss()
-loss_name = 'Tversky Iou Loss'
+device = torch.device('cuda:0'if torch.cuda.is_available() else "cpu")
+criterion = BoundaryIoULoss()
+loss_name = 'Boundary Iou Loss'
 # if loss_name == 'Boundary Loss' or loss_name == 'Boundary':
 #     criterion = criterion.to(device)
 results,save_path = train(model_name,model,optimizer,scheduler,criterion,
