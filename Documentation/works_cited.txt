@@ -1,5 +1,15 @@
 https://arxiv.org/abs/2306.00753 
 https://arxiv.org/pdf/2402.05079 
 https://arxiv.org/abs/2403.05246 
+https://arxiv.org/pdf/2102.02696v2 
+https://github.com/CoinCheung/pytorch-loss/tree/master?tab=readme-ov-file#readme 
+https://arxiv.org/abs/1905.07852 
+https://arxiv.org/pdf/1812.07032
+https://arxiv.org/pdf/2405.15682 
+https://arxiv.org/abs/2407.01530 
+https://arxiv.org/pdf/2407.01530v2 
+
+
+
 
 
