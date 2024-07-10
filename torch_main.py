@@ -19,7 +19,7 @@ from architectures.torch_unet import UNet
 from architectures.Attention_UNet import Attention_UNet
 from architectures.Mamba_Unet import LightMUNet
 from Utils.data2D_ucsf_1d import load_train_data, load_test_data
-from Utils.image_ops import threshold_image
+from Utils.image_ops import threshold_image,dist_map_transform
 from Metrics.plot import save_plots2, save_plots3
 import sklearn 
 from sklearn.model_selection import KFold
@@ -183,6 +183,7 @@ class torch_loader(data.Dataset):
         self.transform = transform 
         self.input_dtype = torch.float32
         self.target_dtype = torch.float32
+        self.dist_transform = dist_map_transform((1,1),2)
 
     def __len__(self): 
         return len(self.inputs)
@@ -191,12 +192,13 @@ class torch_loader(data.Dataset):
         image_array, mask_array = self.inputs[index]
         x = torch.from_numpy(np.transpose((np.array(image_array)),(2,0,1))).type(self.input_dtype)
         y = torch.from_numpy(np.transpose((np.array(mask_array)),(2,0,1))).type(self.target_dtype)
+        dist_map = self.dist_transform(y)
         print
         if self.transform is not None: 
             x = self.transform(x)
             y = self.transform(y)
 
-        return x, y
+        return x, y,dist_map
     
 
 def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size): 
@@ -301,6 +303,7 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
             try:
                 img = batch[0].float().to(device)
                 msk = batch[1].float().to(device)
+                dist_map = batch[2].float().to(device)
                 optimizer.zero_grad()
                 output = model(img)
                 loss = criterion(output, msk)
@@ -374,6 +377,7 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
             'val_losses': all_opt_val_losses,
         }
     print(results)
+    #3
     save_path = save_model_weights_path(mamba_weights_path,f'{num_epochs}')
     torch.save(model_dictionary,save_path)
     if clear_mem:
@@ -418,6 +422,7 @@ train_set,test_set,image_shape = generate_dataset(positive_bool=True,augmentatio
 train_loader,val_loader = loaders(train_set,0.2,batch_size=2)
 test_loader, discard = loaders(test_set,0,batch_size=2)
 
+#2
 model_name = "Light Mamba UNet"
 model = LightMUNet()
 num_epochs = 100
