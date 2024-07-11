@@ -84,6 +84,14 @@ def save_model_weights_path (path,model_name):
     save_path = os.path.join(path,f'{current_time}_#_{model_name}.pth')
     return save_path
 
+def folder_management(path,name,):
+    if os.path.exists(os.path.join(path,name)):
+        pass 
+    else: 
+        os.mkdir()
+
+
+
 #random image augmentation 
 def random_augmentation(image,mask): 
     transforms = v2.Compose([
@@ -235,7 +243,8 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
     images_train = normalization(images_train)
     images_test = normalization(images_test)
     mask_train = mask_train.astype(np.float32) / 255.
-    mask_test = mask_test.astype(np.float32) / 255.
+    mask_test = mask_test.astype(np.float32) 
+    
 
 
     if positive_bool: 
@@ -260,8 +269,8 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
 
     train_loader_data = [(images_train[i],mask_train[i])for i in range(len(images_train)-1)]
     test_loader_data = [(images_test[i],mask_test[i])for i in range(len(images_test)-1)]
-    # print(train_loader_data.shape)
-    # print(test_loader_data.shape)
+
+    
     train_data = torch_loader(train_loader_data)
     test_data = torch_loader(test_loader_data)
 
@@ -396,7 +405,7 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
             'val_losses': all_opt_val_losses,
         }
     #print(results)
-    save_path = save_model_weights_path(mamba_weights_path,f'{num_epochs}')
+    save_path = save_model_weights_path(unet_weights_path,f'{num_epochs}')
     torch.save(model_dictionary,save_path)
     if clear_mem:
         del model, optimizer, criterion
@@ -412,13 +421,12 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
     index=0
     model.eval()
     for i, batch in enumerate(data_loader): 
-        print(i)
         img = batch[0].float()
         img = img.to(device)
         msk = batch[1].float()
         msk = msk.to(device)
         output = model(img)
-        if i % 30 == 0: 
+        if i % 15 == 0: 
             axes[num_samples_count,0].imshow(torch.squeeze(img[0],dim=0).detach().cpu().numpy(),
                             cmap='gray',interpolation='none')
             axes[num_samples_count,1].imshow(torch.squeeze(msk[0],dim=0).detach().cpu().numpy(),
@@ -440,10 +448,10 @@ train_set,test_set,image_shape = generate_dataset(positive_bool=True,augmentatio
 train_loader,val_loader = loaders(train_set,0.2,batch_size=2)
 test_loader, discard = loaders(test_set,0,batch_size=2)
 
-model_name = "Attention UNet"
-model = Attention_UNet()
-num_epochs = 100
-learning_rate = 0.0001
+model_name = "UNet"
+model = UNet()
+num_epochs = 3
+learning_rate = 0.001
 #optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-3)
 optimizer = schedulefree.AdamWScheduleFree(model.parameters(),lr=learning_rate,weight_decay=1e-3)
 lambda1 = lambda epoch: 0.99 ** epoch
@@ -461,7 +469,9 @@ results,save_path = train(model_name,model,optimizer,scheduler,criterion,
                 num_epochs,clear_mem=True)
 
 visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
-run_testing(model_name,model,save_path,test_loader,device,num_epochs,clear_mem=False,
+
+#choose from UNet,Attention,Mamba or Transformer
+run_testing('Attention',model,save_path,test_loader,device,num_epochs,clear_mem=False,
             loss_function=loss_name,lr=learning_rate,scheduler_name=scheduler_name)
 
 
