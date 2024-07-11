@@ -6,6 +6,9 @@ import pandas as pd
 import os 
 from tqdm import tqdm 
 import time 
+from architectures.Attention_UNet import Attention_UNet
+from architectures.torch_unet import UNet
+from architectures.Mamba_Unet import LightMUNet
 
 leaderboard_path = '/home/henry/UCSF_Prostate_Segmentation/Metrics/model_leaderboard.csv'
 save_image_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/leaderboards/'
@@ -14,6 +17,7 @@ def testing_loop(model_name,model,weights_pth,test_loader,device,num_epochs,clea
 
     criterion = IoULoss()
     test_losses = []
+    print(weights_pth)
     model.load_state_dict(torch.load(weights_pth))
     model = model.to(device)
     model.eval()
@@ -39,7 +43,9 @@ def testing_loop(model_name,model,weights_pth,test_loader,device,num_epochs,clea
 
 def update_leaderboard(model_name,num_epochs,loss_function,lr, scheduler_name,iou_loss,time): 
 
-    leaderboard_stats = {'Model':f'{model_name}','IoU Loss':f'{iou_loss}','Inference Time':{time},'Loss Function':f'{loss_function}',
+    loss_score = 1.0 - iou_loss
+
+    leaderboard_stats = {'Model':f'{model_name}','IoU Loss':float(f'{loss_score:.4f}'),'Inference Time':f'{time:.4f}s/image','Loss Function':f'{loss_function}',
                          'Epochs':f'{num_epochs}','Learning Rate':f'{lr}','Scheduler':f'{scheduler_name}'}
     leaderboard_stats_df = pd.DataFrame([leaderboard_stats])
     if os.path.exists(leaderboard_path): 
@@ -76,7 +82,7 @@ def plot_leaderboard(dataframe):
     ax.set_frame_on(False)
 
 
-    table = axes.table(cellText=table_data.values,colLabels=table_data.columns,cellLoc='center',loc='center')
+    table = ax.table(cellText=table_data.values,colLabels=table_data.columns,cellLoc='center',loc='center')
 
     table.auto_set_font_size(False)
     table.set_fontsize(10)
@@ -89,12 +95,27 @@ def plot_leaderboard(dataframe):
 def run_testing(model_name,model,weights_path,test_loader,device,num_epochs,
                  clear_mem,loss_function,lr,scheduler_name): 
 
-    if num_epochs == 100:
-        loss,time = testing_loop(model_name,model,weights_path,test_loader,device,num_epochs,clear_mem)
-        update_leaderboard(model_name,num_epochs,loss_function,lr,scheduler_name,loss,time)
-        print(f'Test IoU: {loss}  Inference Speed: {time}/image')
-    else: 
-        print('Testing only conducted on 100 epoch runs')
+    # if num_epochs == 100:
+    #     loss,time = testing_loop(model_name,model,weights_path,test_loader,device,num_epochs,clear_mem)
+    #     update_leaderboard(model_name,num_epochs,loss_function,lr,scheduler_name,loss,time)
+    # else: 
+    #     print('Testing only conducted on 100 epoch runs')
+
+    loss,time = testing_loop(model_name,model,weights_path,test_loader,device,num_epochs,clear_mem)
+    print(f'Test IoU: {loss}  Inference Speed: {time}/image')
+    update_leaderboard(model_name,num_epochs,loss_function,lr,scheduler_name,loss,time)
+    
+
+
+def model_selection(model_name: str):
+    if model_name == 'Attention':
+        model = Attention_UNet()
+    if model_name == 'Vanilla':
+        model = UNet()
+    if model_name == 'Mamba': 
+        model = LightMUNet()
+        
+
 
 
 
