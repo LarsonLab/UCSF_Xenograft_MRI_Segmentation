@@ -90,19 +90,6 @@ def folder_management(path,name,):
     else: 
         os.mkdir()
 
-
-
-#random image augmentation 
-def random_augmentation(image,mask): 
-    transforms = v2.Compose([
-    v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomVerticalFlip(p=0.5),
-    v2.RandomRotation(degrees=(-15,15))
-])
-    image = transforms(image)
-    mask = transforms(mask)
-    return image,mask
-
 def save_model_weights_path (path,model_name): 
     current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     save_path = os.path.join(path,f'{current_time}_#_{model_name}.pth')
@@ -228,7 +215,7 @@ class torch_loader(data.Dataset):
         return image,mask
     
 
-def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size): 
+def generate_dataset(positive_bool,val_size): 
 
     images_train, mask_train = load_train_data()
     images_test, mask_test = load_test_data()
@@ -251,18 +238,6 @@ def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size
         images_train, mask_train = positives_only(images_train,mask_train)
         images_test,mask_test = positives_only(images_test,mask_test)
         
-    if augmentation_bool: 
-        for i in range(0,len(images_train)-1): 
-            prob = random.random()
-            if prob < augmentation_prob: 
-                im = images_train[i]
-                mask = mask_train[i]
-                aug_im, aug_mask = random_augmentation(im,mask)
-                images_train[i] = aug_im
-                mask_train[i] = aug_mask
-            else: 
-                pass 
-
     mask_test = np.expand_dims(np.array(mask_test),axis=-1)
 
     sanity_check(images_train,mask_train)
@@ -443,14 +418,13 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
 
 if __name__ == '__main__':
     log_directory_main,log_directory_test= directories()
-train_set,test_set,image_shape = generate_dataset(positive_bool=True,augmentation_bool=True,
-                                      augmentation_prob=0.5,val_size=0.1)
+train_set,test_set,image_shape = generate_dataset(positive_bool=False,val_size=0.1)
 train_loader,val_loader = loaders(train_set,0.2,batch_size=2)
 test_loader, discard = loaders(test_set,0,batch_size=2)
 
-model_name = "UNet"
-model = UNet()
-num_epochs = 3
+model_name = "Attention"
+model = Attention_UNet()
+num_epochs = 100
 learning_rate = 0.001
 #optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-3)
 optimizer = schedulefree.AdamWScheduleFree(model.parameters(),lr=learning_rate,weight_decay=1e-3)
