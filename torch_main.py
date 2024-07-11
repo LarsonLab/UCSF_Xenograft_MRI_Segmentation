@@ -180,11 +180,12 @@ def normalization(data):
 
 class torch_loader(data.Dataset): 
 
-    def __init__(self,inputs,transform=None): 
+    def __init__(self,inputs,transform=None,augmentation_prob=0.5): 
         self.inputs = inputs
         self.transform = transform 
         self.input_dtype = torch.float32
         self.target_dtype = torch.float32
+        self.augmentation_prob = augmentation_prob
 
     def __len__(self): 
         return len(self.inputs)
@@ -194,11 +195,29 @@ class torch_loader(data.Dataset):
         x = torch.from_numpy(np.transpose((np.array(image_array)),(2,0,1))).type(self.input_dtype)
         y = torch.from_numpy(np.transpose((np.array(mask_array)),(2,0,1))).type(self.target_dtype)
 
+        if random.random() < self.augmentation_prob:
+            x,y = self.apply_augmentations(x,y)
+
         if self.transform is not None: 
             x = self.transform(x)
             y = self.transform(y)
 
         return x, y
+    
+    def apply_augmentations(self,image,mask):
+
+        transforms = v2.Compose([
+            v2.RandomHorizontalFlip(p=0.5),
+            v2.RandomVerticalFlip(p=0.5),
+            v2.RandomRotation(degrees=(-15,15))
+        ])
+
+        stacked = torch.cat([image,mask],dim=0)
+        augmented = transforms(stacked)
+        image = augmented[:1]
+        mask = augmented[1:]
+
+        return image,mask
     
 
 def generate_dataset(positive_bool,augmentation_bool, augmentation_prob,val_size): 
