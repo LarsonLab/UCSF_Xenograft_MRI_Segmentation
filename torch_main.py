@@ -5,6 +5,7 @@ import torchvision
 from torchvision import utils as vutils 
 from torchvision import transforms 
 from torchvision.transforms import v2
+from torch import nn 
 from torch.nn import functional as F 
 from torch.utils import data 
 from torch.optim import SGD, Adam
@@ -29,11 +30,12 @@ import datetime
 import random 
 from tqdm import tqdm
 import datetime 
-from Metrics.losses import DiceLoss, DiceBCELoss, IoULoss, TverskyIoULoss, BoundaryIoULoss
+from Metrics.losses import DiceLoss, DiceBCELoss, IoULoss, TverskyIoULoss, BoundaryIoULoss, CompositeBoundaryLoss, TverskyBoundaryLoss, CompositeTversky
 from Metrics.boundary_loss import BoundaryLoss
 from Metrics.losses import TverskyLoss
 from testing import run_testing
 import schedulefree
+from Utils.image_ops import resize_images
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -60,6 +62,8 @@ attention_weights_path = '/home/henry/UCSF_Prostate_Segmentation/Weights/Attenti
 mamba_weights_path = '/home/henry/UCSF_Prostate_Segmentation/Weights/Mamba_weights/'
 plots_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/Inference_results/'
 metrics_save_path = '/home/henry/UCSF_Prostate_Segmentation/Data_plots/metrics_plots/'
+unetr_weights_path = 'Weights/UNetR_weights'
+
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 
@@ -175,7 +179,7 @@ def normalization(data):
 
 class torch_loader(data.Dataset): 
 
-    def __init__(self,inputs,transform=None,augmentation_prob=0.5): 
+    def __init__(self,inputs,transform=None,augmentation_prob=0.25): 
         self.inputs = inputs
         self.transform = transform 
         self.input_dtype = torch.float32
@@ -203,8 +207,7 @@ class torch_loader(data.Dataset):
 
         transforms = v2.Compose([
             v2.RandomHorizontalFlip(p=0.5),
-            v2.RandomVerticalFlip(p=0.5),
-            v2.RandomRotation(degrees=(-15,15))
+            v2.RandomVerticalFlip(p=0.5)
         ])
 
         stacked = torch.cat([image,mask],dim=0)
@@ -227,6 +230,7 @@ def generate_dataset(positive_bool,val_size):
 
     image_shape = images_train.shape[1]
 
+
     images_train = normalization(images_train)
     images_test = normalization(images_test)
     mask_train = mask_train.astype(np.float32) / 255.
@@ -237,8 +241,14 @@ def generate_dataset(positive_bool,val_size):
     if positive_bool: 
         images_train, mask_train = positives_only(images_train,mask_train)
         images_test,mask_test = positives_only(images_test,mask_test)
+
         
     mask_test = np.expand_dims(np.array(mask_test),axis=-1)
+
+    # images_train = resize_images(images_train,256,2)
+    # images_test = resize_images(images_test,256,2)
+    # mask_train = resize_images(mask_train,256,0)
+    # mask_test = resize_images(mask_test,256,0)
 
     sanity_check(images_train,mask_train)
 
@@ -290,13 +300,14 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
     all_opt_val_losses = []
     all_iou_val_losses = []
     iters = 0
-    high_iou = 0 
+    high_iou = float('inf')
+    model_dictionary = None
 
     for epoch in range(num_epochs): 
         print(f"Epoch {epoch+1} / {num_epochs}")
         
         model.train() 
-        optimizer.train() 
+        #optimizer.train() 
         opt_train_losses = []  
         dice_train_losses = []
         composite_train_losses = []
@@ -325,7 +336,7 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
         all_opt_train_losses.append(sum(opt_train_losses) / len(opt_train_losses))
 
         model.eval()
-        optimizer.eval()
+        #optimizer.eval()
         opt_val_losses = []
         dice_val_losses = []
         dice_val_preds = []
@@ -353,7 +364,7 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
         
         all_opt_val_losses.append(sum(opt_val_losses) / len(opt_val_losses))
         iou_val_loss = sum(iou_val_losses)/len(iou_val_losses)
-        if iou_val_loss > high_iou: 
+        if iou_val_loss < high_iou: 
             model_dictionary = model.state_dict()
         all_iou_val_losses.append(iou_val_loss)
         print(f'Epoch {epoch+1} completed. Train Loss: {all_opt_train_losses[-1]}, Val Loss: {all_opt_val_losses[-1]}, IoU: {all_iou_val_losses[-1]}')
@@ -380,7 +391,12 @@ def train(model_name, model, optimizer,scheduler,criterion, loss_name,train_load
             'val_losses': all_opt_val_losses,
         }
     #print(results)
-    save_path = save_model_weights_path(unet_weights_path,f'{num_epochs}')
+    if model_name.lower() == 'attention':
+        save_path = save_model_weights_path(attention_weights_path,f'{num_epochs}')
+    elif model_name.lower() == 'unet':
+        save_path = save_model_weights_path(unet_weights_path,f'{num_epochs}')
+    elif model_name.lower() == 'mamba': 
+        save_path = save_model_weights_path(mamba_weights_path,f'{num_epochs}')
     torch.save(model_dictionary,save_path)
     if clear_mem:
         del model, optimizer, criterion
@@ -418,14 +434,15 @@ def visualize_segmentation(model,data_loader,num_samples=5,device='cuda'):
 
 if __name__ == '__main__':
     log_directory_main,log_directory_test= directories()
-train_set,test_set,image_shape = generate_dataset(positive_bool=False,val_size=0.1)
-train_loader,val_loader = loaders(train_set,0.2,batch_size=2)
+train_set,test_set,image_shape = generate_dataset(positive_bool=True,val_size=0.1)
+train_loader,val_loader = loaders(train_set,0.1,batch_size=2)
 test_loader, discard = loaders(test_set,0,batch_size=2)
 
-model_name = "Attention"
-model = Attention_UNet()
-num_epochs = 100
-learning_rate = 0.001
+model_name = "Mamba"
+model = LightMUNet()
+num_epochs = 200
+learning_rate = 1e-3
+#optimizer = torch.optim.SGD(model.parameters(),lr=learning_rate,momentum=0.5,weight_decay=1e-4)
 #optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate,weight_decay=1e-3)
 optimizer = schedulefree.AdamWScheduleFree(model.parameters(),lr=learning_rate,weight_decay=1e-3)
 lambda1 = lambda epoch: 0.99 ** epoch
@@ -435,7 +452,7 @@ scheduler_name = 'Schedule Free'
 #device = torch.device('cuda'if torch.cuda.is_available() else "cpu")
 device = torch.device('cuda:0'if torch.cuda.is_available() else "cpu")
 criterion = BoundaryIoULoss()
-loss_name = 'Boundary Iou Loss'
+loss_name = 'Boundary IoU'
 # if loss_name == 'Boundary Loss' or loss_name == 'Boundary':
 #     criterion = criterion.to(device)
 results,save_path = train(model_name,model,optimizer,scheduler,criterion,
@@ -445,7 +462,7 @@ results,save_path = train(model_name,model,optimizer,scheduler,criterion,
 visualize_segmentation(model,val_loader,num_samples=5,device='cuda')
 
 #choose from UNet,Attention,Mamba or Transformer
-run_testing('Attention',model,save_path,test_loader,device,num_epochs,clear_mem=False,
+run_testing('Light Mamba',model,save_path,test_loader,device,num_epochs,clear_mem=False,
             loss_function=loss_name,lr=learning_rate,scheduler_name=scheduler_name)
 
 
