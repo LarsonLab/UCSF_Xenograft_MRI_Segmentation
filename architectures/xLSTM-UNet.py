@@ -6,7 +6,7 @@ from torch.nn import functional as F
 from typing import Union,Type, List, Tuple 
 from torch.nn.modules.conv import _ConvNd
 from torch.nn.modules.dropout import _DropoutNd
-from dynamic_network_architectures.building_blocks.helper import convert_conv_op_dim 
+from dynamic_network_architectures.building_blocks.helper import convert_conv_op_to_dim 
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
 from dynamic_network_architectures.building_blocks.helper import get_matching_instancenorm, convert_dim_to_conv_op
 from nnunetv2.utilities.network_initialization import InitWeights_He
@@ -350,8 +350,109 @@ class UNetResDecoder(nn.Module):
 
 class UXlstmBot(nn.Module): 
 
+    def __init__(self,
+                 input_channels: int,
+                 n_stages: int,
+                 features_per_stage: Union[int,List[int],Tuple[int, ...]],
+                 conv_op: Type[_ConvNd],
+                 kernel_sizes: Union[int,List[int],Tuple[int, ...]],
+                 strides: Union[int,List[int],Tuple[int, ...]],
+                 n_conv_per_stage: Union[int,List[int],Tuple[int, ...]],
+                 num_classes: int,
+                 n_conv_per_stage_decoder: Union[int,List[int],Tuple[int, ...]],
+                 conv_bias: bool = False,
+                 norm_op: Union[None,Type[nn.Module]] = None,
+                 norm_op_kwargs: dict = None,
+                 dropout_op: Union[None, Type[_DropoutNd]] = None,
+                 dropout_op_kwargs: dict = None,
+                 nonlin: Union[None,Type[torch.nn.Module]] = None,
+                 nonlin_kwargs: dict = None,
+                 deep_supervision: bool = False,
+                 stem_channels: int = None):
+        super().__init__()
+        n_blocks_per_stage = n_conv_per_stage
+        if isinstance(n_blocks_per_stage,int):
+            n_blocks_per_stage = [n_blocks_per_stage] * n_stages
+        if isinstance(n_conv_per_stage_decoder,int):
+            n_conv_per_stage_decoder = [n_conv_per_stage_decoder] * (n_stages-1)
 
+        for s in range(math.ceil(n_stages / 2),n_stages):
+            n_blocks_per_stage[s] = 1
+        for s in range(math.ceil((n_stages -1 )/2 + 0.5),n_stages -1):
+            n_conv_per_stage_decoder[s] = 1
 
+        assert len(n_blocks_per_stage) == n_stages
+        assert len(n_conv_per_stage_decoder) == (n_stages -1)
+
+        self.encoder = UNetResEncoder(
+            input_channels,n_stages,features_per_stage,
+            conv_op,kernel_sizes,strides,n_blocks_per_stage,
+            conv_bias,norm_op,norm_op_kwargs,nonlin,
+            nonlin_kwargs,return_skips=True,stem_channels=stem_channels
+        )
+
+        self.xlstm = ViLLayer(dim = features_per_stage[-1])
+        self.decoder = UNetResDecoder(self.encoder,num_classes,n_conv_per_stage_decoder,deep_supervision)
+
+    def forward(self,x):
+        skips = self.encoder(x)
+        skips[-1] = self.xlstm(skips[-1])
+        return self.decoder(skips)
+    
+    def compute_conv_feature_map_size(self,input_size):
+        assert len(input_size) == convert_conv_op_to_dim(self.encoder.conv_op)
+        return self.encoder.compute_conv_feature_map_size(input_size) + self.decoder.compute_conv_feature_map_size(input_size)
+    
+    def get_uxlstm_bot_2_from_plans(
+            plans_manager: PlansManager,
+            dataset_json: dict,
+            configuration_manager: ConfigurationManager,
+            num_input_channels: int,
+            deep_supervision: bool = True
+    ):
+        
+        num_stages = len(configuration_manager.conv_kernel_sizes)
+        dim = len(configuration_manager.conv_kernel_sizes[0])
+        conv_op = convert_dim_to_conv_op(dim)
+
+        label_manager = plans_manager.get_label_manager(dataset_json)
+
+        segmentation_network_class_name = 'UXlstmBot'
+        network_class = UXlstmBot
+        kwargs= {
+            'UXlstmBot':{
+                'conv_bias': True,
+                'norm_op': get_matching_instancenorm(conv_op),
+                'norm_op_kwargs': {'eps':1e-5,'affine':True},
+                'dropout_op': None,'dropout_op_kwargs':None,
+                'nonlin': nn.LeakyReLU,'nonlin_kwargs':{'inplace':True}
+            }
+        }
+
+        conv_or_blocks_per_stage = {
+            'n_conv_per_stage':configuration_manager.n_conv_per_stage_encoder,
+            'n_conv_per_stage_decoder': configuration_manager.n_conv_per_stage_decoder
+        }
+
+        model = network_class(
+            input_channels=num_input_channels,
+            n_stages = num_stages,
+            features_per_stage=[min(configuration_manager.UNet_base_num_features * 2 ** i,
+                                configuration_manager.unet_max_num_features) for i in range(num_stages)],
+            conv_op = conv_op,
+            kernel_sizes=configuration_manager.conv_kernel_sizes,
+            strides = configuration_manager.pool_op_kernel_sizes,
+            num_classes=label_manager.num_segmentation_heads,
+            deep_supervision=deep_supervision,
+            **conv_or_blocks_per_stage,
+            **kwargs[segmentation_network_class_name]
+        
+            )
+        model.apply(InitWeights_He(1e-2))
+
+        return model 
+        
+    
 
 
         
