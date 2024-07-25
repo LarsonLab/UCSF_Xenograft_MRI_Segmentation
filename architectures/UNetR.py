@@ -25,7 +25,7 @@ class ConvBlock(nn.Module):
             nn.Conv2d(in_c,out_c,kernel_size=kernel_size,padding=padding),
             nn.BatchNorm2d(out_c),
             nn.ReLU(inplace=True),
-            nn.Dropout2d(0.2)
+            nn.Dropout2d(0.4)
         )
 
     def forward(self,x):
