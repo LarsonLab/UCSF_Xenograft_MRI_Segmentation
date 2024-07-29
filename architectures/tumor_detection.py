@@ -31,8 +31,8 @@ def train_resnet_classification(device,train_loader,validation_loader,test_loade
     net.fc = nn.Linear(net.fc.in_features,2)
     net = net.to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = SGD(net.parameters(),lr=0.001)
-    epochs = 100 
+    optimizer = SGD(net.parameters(),lr=0.001,weight_decay=0.001)
+    epochs = 200
     net_final = deepcopy(net)
 
     best_validation_accuracy = 0 
@@ -50,7 +50,6 @@ def train_resnet_classification(device,train_loader,validation_loader,test_loade
             targets = batch[1].long().to(device)
             optimizer.zero_grad()
             predictions = net(inputs)
-            print('yes' if torch.argmax(predictions[0]) == 1 else 'no')
             loss = criterion(predictions,targets)
             loss.backward()
             optimizer.step()

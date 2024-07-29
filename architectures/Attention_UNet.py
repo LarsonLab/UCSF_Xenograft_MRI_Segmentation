@@ -45,11 +45,11 @@ class conv_block(nn.Module):
             nn.Conv2d(ch_in,ch_out,kernel_size=3,stride=1,padding=1,bias=True),
             nn.BatchNorm2d(ch_out),
             nn.ReLU(inplace=True),
-            nn.Dropout2d(0.2),
+            nn.Dropout2d(0.5),
             nn.Conv2d(ch_out,ch_out,kernel_size=3,stride=1,padding=1,bias=True),
             nn.BatchNorm2d(ch_out),
             nn.ReLU(inplace=True),
-            nn.Dropout2d(0.2)
+            nn.Dropout2d(0.5)
 
         )
 

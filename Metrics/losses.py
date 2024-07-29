@@ -231,3 +231,94 @@ class BoundaryIoULoss(nn.Module):
     
 def is_binary_prob(t:Tensor,axis=1) -> bool:
     return ((t>=0) & (t <= 1)).all()
+
+
+class CompositeBoundaryLoss(nn.Module): 
+
+    def __init__(self,composite_percent=IOTA,boundary_percent=MU):
+        super(CompositeBoundaryLoss,self).__init__()
+        self.composite_percent = composite_percent
+        self.boundary_percent = boundary_percent 
+        self.composite_loss = DiceBCELoss()
+        self.boundary_loss = BoundaryLoss()
+
+    def forward(self,input,target):
+        composite_loss = self.composite_loss(input,target)
+        boundary_loss = self.boundary_loss(input,target)
+        combined_loss = (composite_loss * self.composite_percent) + (boundary_loss * self.boundary_percent)
+
+        return combined_loss 
+    
+
+class TverskyBoundaryLoss(nn.Module):
+
+    def __init__(self,tversky_percent = IOTA, boundary_percent=MU):
+        super(TverskyBoundaryLoss,self).__init__()
+        self.tversky_percent = tversky_percent
+        self.boundary_percent = boundary_percent 
+        self.tversky_loss = TverskyLoss()
+        self.boundary_loss = BoundaryLoss()
+        self.weights = nn.Parameter(torch.ones(2) / 2)
+
+    def normalize_weights(self):
+        return F.softmax(self.weights,dim=0)
+
+    def forward(self,input,target):
+        normalized_weights = self.normalize_weights()
+        tversky_loss_value = self.tversky_loss(input,target)
+        boundary_loss_value = self.boundary_loss(input,target)
+        total_loss = (normalized_weights[0] * tversky_loss_value) + (normalized_weights[1] * boundary_loss_value)
+        return total_loss
+    
+
+class CompositeTversky(nn.Module):
+
+    def __init__(self,composite_percent=IOTA,tversky_percent=MU):
+        super(CompositeTversky,self).__init__()
+        self.composite_percent = composite_percent 
+        self.tversky_percent = tversky_percent 
+        self.composite_loss = DiceBCELoss()
+        self.tversky_loss = TverskyLoss()
+
+    def forward(self,input,target):
+        input = F.sigmoid(input)
+        tversky_loss_val = self.tversky_loss(input,target)
+        composite_loss_val = self.composite_loss(input,target)
+        combined_loss = (tversky_loss_val * self.tversky_percent) + (composite_loss_val * self.composite_percent)
+
+        return combined_loss 
+    
+
+class BoundaryTversky(nn.Module):
+
+    def __init__(self,boundary_percent=THETA,tversky_percent=GAMMA):
+        super(BoundaryTversky,self).__init__()
+        self.boundary_percent= boundary_percent 
+        self.tversky_percent = tversky_percent 
+        self.boundary_loss = BoundaryLoss()
+        self.tversky_loss = TverskyLoss()
+
+    def forward(self,input,target):
+        boundary_loss = self.boundary_loss(input,target)
+        tversky_loss = self.tversky_loss(input,target)
+        combined_loss = (boundary_loss * self.boundary_percent) + (tversky_loss + self.tversky_percent)
+        
+        return combined_loss 
+    
+
+class BCE_BoundaryLoss(nn.Module):
+
+    def __init__(self,boundary_percent=0.3,cross_entropy_percent=0.7):
+        super(BCE_BoundaryLoss,self).__init__()
+        self.boundary_percent = boundary_percent 
+        self.cross_entropy_percent = cross_entropy_percent 
+        self.bce_loss = nn.BCEWithLogitsLoss()
+        self.boundary_loss = BoundaryLoss()
+
+    def forward(self,inputs,targets):
+        bce_loss = self.bce_loss(inputs,targets)
+        boundary_loss = self.boundary_loss(inputs,targets)
+        combined_loss = (bce_loss * self.cross_entropy_percent) + (boundary_loss * self.boundary_percent)
+        return combined_loss 
+
+
