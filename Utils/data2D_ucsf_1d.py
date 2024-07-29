@@ -5,7 +5,7 @@ import h5py
 import pdb
 
 def load_train_data():
-    path = '/data/ernesto/data_2023/'
+    path = '/home/henry/UCSF_Prostate_Segmentation/data_2023'
     file = 'ucsf_data_train_all.hdf5'
 
     data = h5py.File(os.path.join(path, file), 'r')
@@ -16,18 +16,18 @@ def load_train_data():
     return images_train,mask_train
 
 def load_test_data():
-    path = '/data/ernesto/data_2023'
+    path =  '/home/henry/UCSF_Prostate_Segmentation/data_2023'
     file = 'ucsf_data_test_all.hdf5'
     
     data = h5py.File(os.path.join(path, file), 'r')
     images_test = np.array(data['img'])
     
-    # mask_test = np.array(data['mask'])
+    mask_test = np.array(data['mask'])
 
-    # mask_test = mask_test.astype(dtype=bool)
+    mask_test = mask_test.astype(dtype=bool)
 
     print('====== Loading of ALL UCSF Test Data with Tumors =======')
-    return images_test
+    return images_test, mask_test
 
 # images_train, mask_train = load_train_data()
 # print(f'images_train: {images_train.shape}')

@@ -1,16 +1,13 @@
 import tensorflow as tf
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Conv2D, Conv2DTranspose, MaxPooling2D, concatenate, Input, Dropout, Add, Activation, UpSampling2D,  Concatenate
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import ModelCheckpoint, LearningRateScheduler
-from tensorflow.keras import backend as K
 import numpy as np
 from matplotlib import pyplot as plt
-from tensorflow.keras.metrics import Precision, Recall, AUC, Accuracy
 from keras.losses import BinaryCrossentropy
-
-##
+import torch 
+import datetime
 import os
+from torch import nn 
+
+current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 smooth = 1e-5
 def dice_coef(y_true, y_pred):
@@ -31,6 +28,9 @@ def IoU(y_true, y_pred):
     intersection = K.sum(y_true_f * y_pred_f)
     union = K.sum(y_true_f)+K.sum(y_pred_f)-intersection
     return (intersection + smooth)/(union + smooth)
+
+SMOOTH = 1e-6
+
 
 def weighted_bce(y_true, y_pred):
     y_true_temp = K.flatten(y_true)
@@ -93,4 +93,19 @@ def composite_loss(y_true, y_pred):
 
 #   def save_images(self,epoch):
 #     predications = self.model.predict(self.val_data)
+
+def plot_training_scores(losses,train_scores,save_path): 
+    fig, axes = plt.subplots(nrows=1,ncols=2,figsize=(5,5))
+    axes[0].set_title('Train BCE Loss')
+    axes.plot(range(len(losses)),losses)
+    axes[1].set_title('IoU Score vs Training Step')
+    axes[1].plot(range(len(train_scores)),train_scores)
+
+    print(f'MEAN TRAIN IOU: {torch.mean(torch.tensor(train_scores))}')
+    plt.savefig(f'{save_path}Training_Scores:{current_time}')
+
+    
+
+
+    
           

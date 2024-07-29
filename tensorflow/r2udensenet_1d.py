@@ -16,15 +16,16 @@ import os
 K.set_image_data_format('channels_last')
 """Recurrent Layer"""
 def rec_layer(layer, filters):
-    reconv1 = Conv2D(filters, (3, 3), activation='relu', padding='same')(layer)
-    layer_add = Conv2D(filters, kernel_size=(1, 1), padding='same')(layer)
-    add_conv1 = Add()([reconv1,layer_add])
+    reconv1 = Conv2D(filters, (3, 3), activation='relu', padding='same')(layer)#(1,32)
+    layer_add = Conv2D(filters, kernel_size=(1, 1), padding='same')(layer) #(1,32)
+    add_conv1 = Add()([reconv1,layer_add]) #(32,32)
     #drop_inter = Dropout(0.3)(reconc1)
-    reconv1 = Conv2D(filters, (3, 3), activation='relu', padding='same')(add_conv1)
-    add_conv2 = Add()([reconv1,layer_add])
-    reconv1 = Conv2D(filters, (3, 3), activation='relu', padding='same')(add_conv2)
+    reconv1 = Conv2D(filters, (3, 3), activation='relu', padding='same')(add_conv1)#(32,32)
+    add_conv2 = Add()([reconv1,layer_add])#(32,32)
+    reconv1 = Conv2D(filters, (3, 3), activation='relu', padding='same')(add_conv2) #(32,32)
     return reconv1
     
+#metrics 
 pr_metric = AUC(curve='PR', num_thresholds=10, name = 'pr_auc') 
 roc_metric = AUC(name = 'auc')
 METRICS = [dice_loss,
@@ -50,13 +51,13 @@ image_col = 192
 image_depth = 1
 
 def r2udensenet():
-    inputs = inputs = Input((image_row, image_col, image_depth))
-    conv1 = rec_layer(inputs,32)
-    conv1 = rec_layer(conv1,32)
-    conv1add = Conv2D(32, kernel_size=(1, 1), padding='same')(inputs)
-    add1 = Add()([conv1add, conv1])
-    dense1 = concatenate([add1, conv1], axis=3)
-    pool1 = MaxPooling2D(pool_size=(2, 2))(dense1)
+    inputs = Input((image_row, image_col, image_depth)) #(1,1)
+    conv1 = rec_layer(inputs,32) #(1,32)
+    conv1 = rec_layer(conv1,32) #(32,32)
+    conv1add = Conv2D(32, kernel_size=(1, 1), padding='same')(inputs) #(1,32)
+    add1 = Add()([conv1add, conv1])#(32,32)
+    dense1 = concatenate([add1, conv1], axis=3) #(32,64)
+    pool1 = MaxPooling2D(pool_size=(2, 2))(dense1)#(64,64)
 
     conv2 = rec_layer(pool1, 64)
     conv2 = rec_layer(conv2, 64)
@@ -81,18 +82,18 @@ def r2udensenet():
     pool4 = MaxPooling2D(pool_size=(2, 2))(dense4)
 
     conv5 = rec_layer(pool4, 512)
-    conv5 = rec_layer(conv5, 512)
+    conv5 = rec_layer(conv5, 512) 
     conv5add = Conv2D(512, kernel_size=(1, 1), padding='same')(pool4)
-    add5 = Add()([conv5add, conv5])
-    dense5 = concatenate([add5, conv5], axis=3)
-    drop5 = Dropout(0.5)(dense5)
+    add5 = Add()([conv5add, conv5]) 
+    dense5 = concatenate([add5, conv5], axis=3) 
+    drop5 = Dropout(0.5)(dense5) 
 
-    up6 = concatenate([Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same')(dense5), conv4], axis=3)
-    conv6 = rec_layer(up6, 256)
-    conv6 = rec_layer(conv6, 256)
-    conv6add = Conv2D(256, kernel_size=(1, 1), padding='same')(up6)
-    add6 = Add()([conv6add, conv6])
-    dense6 = concatenate([add6, conv6], axis=3)
+    up6 = concatenate([Conv2DTranspose(256, (2, 2), strides=(2, 2), padding='same')(dense5), conv4], axis=3)#(1024,256)/#(256,512)
+    conv6 = rec_layer(up6, 256) 
+    conv6 = rec_layer(conv6, 256) 
+    conv6add = Conv2D(256, kernel_size=(1, 1), padding='same')(up6) #(256,256)
+    add6 = Add()([conv6add, conv6]) 
+    dense6 = concatenate([add6, conv6], axis=3) 
 
     up7 = concatenate([Conv2DTranspose(128, (2, 2), strides=(2, 2), padding='same')(dense6), conv3], axis=3)
     conv7 = rec_layer(up7, 128)

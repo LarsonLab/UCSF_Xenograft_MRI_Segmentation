@@ -31,6 +31,7 @@ import pdb
 from sklearn.model_selection import KFold
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from time import time
+from torch import from_numpy
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -136,6 +137,7 @@ def train(bool_load_weights = False):
     images_train, mask_train = load_train_data()
     images_train = images_train.astype('float64')
     mask_train = mask_train.astype('float64')
+
 
     # Normalization
     images_train_mean = np.mean(images_train)
