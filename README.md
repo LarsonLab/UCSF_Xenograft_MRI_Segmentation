@@ -1,1 +1,1 @@
-# UCSF-Prostate-Segmentation
+# UCSF-Xenografts-Segmentation
