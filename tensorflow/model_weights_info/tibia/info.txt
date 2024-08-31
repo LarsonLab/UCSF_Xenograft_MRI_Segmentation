@@ -1,0 +1,26 @@
+Date: 2024-08-18 19:11:22
+Model Name: r2udensenet
+Additional Information: Testing Optimizer
+Date: 08_18_24
+Dataset: /data/satvik/data/tibia/train
+Trial Number: 2
+Load Weights: False
+Epochs: 250
+Batch Size: 2
+Optimizer: AdamW
+Learning Rate: 1e-05
+Scheduler: Linear
+Augmentation Probability: 0.5
+Loss Function: composite_loss
+Monitor Param: val_loss
+
+Composite Loss == [0.10465530306100845] Mean Composite Loss == 0.10465530306100845
+Dice Loss == [0.08387813717126846] Mean Dice Loss == 0.08387813717126846
+Dice Coefficient == [0.9161218404769897] Mean Dice Coefficient == 0.9161218404769897
+Precision == [0.9139214158058167] Mean Precision == 0.9139214158058167
+Recall == [0.9481722116470337] Mean Recall == 0.9481722116470337
+AUC == [0.9069020748138428] Mean AUC == 0.9069020748138428
+Accuracy == [0.9927994608879089] Mean Accuracy == 0.9927994608879089
+IoU == [0.8461178541183472] Mean IoU == 0.8461178541183472
+BCE original (equal weighting) == [0.03225495666265488] Mean BCE original == 0.03225495666265488
+BCE (unweighted) == [0.16996677219867706] Mean BCE == 0.16996677219867706

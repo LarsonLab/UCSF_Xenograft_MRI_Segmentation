@@ -1,0 +1,26 @@
+Date: 2024-08-22 07:50:22
+Model Name: r2udensenet
+Additional Information: Testing Optimizer
+Date: 08_22_24
+Dataset: ['/data/satvik/data_2023/new_data_110623/train', '/data/satvik/data/liver/train', '/data/satvik/data/tibia/train']
+Trial Number: 1
+Load Weights: False
+Epochs: 250
+Batch Size: 2
+Optimizer: AdamW
+Learning Rate: 1e-05
+Scheduler: Linear
+Augmentation Probability: 0.5
+Loss Function: composite_loss
+Monitor Param: val_loss
+
+composite loss == [0.2516948878765106]
+dice_loss == [0.13794608414173126]
+dice == [0.8620540499687195]
+precision == [0.9070184230804443]
+recall == [0.9155181646347046]
+auc == [0.8666567206382751]
+accuracy == [0.9781582355499268]
+IoU == [0.7726730704307556]
+BCE original (equal weighting) == [0.07647731900215149]
+BCE (unweighted) == [0.5837292671203613]

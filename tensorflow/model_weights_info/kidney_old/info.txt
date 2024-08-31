@@ -1,0 +1,16 @@
+Date: 2024-08-08 15:27:25
+Model Name: r2udensenet
+Dataset Name: /data/satvik/data_2023/new_data_110623
+Additional Information: Testing Optimizer
+Date: 08_07_24
+Trial Number: 6
+Load Weights: False
+Epochs: 250
+Batch Size: 2
+Optimizer: AdamW
+Learning Rate: 1e-05
+Scheduler: Linear
+Augmentation Probability: 0.5
+Loss Function: composite_loss
+Monitor Param: val_loss
+

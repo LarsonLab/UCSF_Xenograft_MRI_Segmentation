@@ -1,0 +1,26 @@
+Date: 2024-08-19 08:44:48
+Model Name: r2udensenet
+Additional Information: Testing Optimizer
+Date: 08_18_24
+Dataset: /data/satvik/data/liver/train
+Trial Number: 4
+Load Weights: False
+Epochs: 250
+Batch Size: 2
+Optimizer: AdamW
+Learning Rate: 1e-05
+Scheduler: Linear
+Augmentation Probability: 0.5
+Loss Function: composite_loss
+Monitor Param: val_loss
+
+Composite Loss == [0.2955092787742615] Mean Composite Loss == 0.2955092787742615
+Dice Loss == [0.1526355892419815] Mean Dice Loss == 0.1526355892419815
+Dice Coefficient == [0.8473644256591797] Mean Dice Coefficient == 0.8473644256591797
+Precision == [0.8955754041671753] Mean Precision == 0.8955754041671753
+Recall == [0.9131683707237244] Mean Recall == 0.9131683707237244
+AUC == [0.8526811599731445] Mean AUC == 0.8526811599731445
+Accuracy == [0.9756171703338623] Mean Accuracy == 0.9756171703338623
+IoU == [0.7479391694068909] Mean IoU == 0.7479391694068909
+BCE original (equal weighting) == [0.07151457667350769] Mean BCE original == 0.07151457667350769
+BCE (unweighted) == [0.7049137949943542] Mean BCE == 0.7049137949943542
