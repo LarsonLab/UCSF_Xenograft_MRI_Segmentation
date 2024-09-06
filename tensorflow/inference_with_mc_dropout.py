@@ -93,9 +93,9 @@ def predict(weight_directory, weight_file, pred_directory, saveImgs = False, opt
     images_test_T2 = images_test[:,:,:,0]
 
     # Do we want to keep
-    images_test_mean = np.mean(images_test_T2)
-    images_test_std = np.std(images_test_T2)
-    images_test_T2 = (images_test_T2 - images_test_mean)/images_test_std
+    # images_test_mean = np.mean(images_test_T2)
+    # images_test_std = np.std(images_test_T2)
+    # images_test_T2 = (images_test_T2 - images_test_mean)/images_test_std
 
     # Shape: (n, height, width, 1)
     images_test_T2 = np.expand_dims(images_test_T2, axis = 3)
