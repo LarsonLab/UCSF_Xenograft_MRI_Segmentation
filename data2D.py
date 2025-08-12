@@ -34,7 +34,7 @@ def load_train_data(path):
     mask_train = np.moveaxis(mask_train, [-1], [0])
     mask_train = np.expand_dims(mask_train, axis=-1)
 
-    print('=============== Loading of UCSF Training Images and Masks ===================')
+    print('=============== Loading of UCSF Training Images and Masks ('===============')
     return images_train,mask_train
 
 def load_test_data(path):
@@ -44,9 +44,8 @@ def load_test_data(path):
             temp = h5py.File(os.path.join(path, file), 'r')
             img = np.array(temp['img'])
             mask = np.array(temp['mask'])
-
-            # print(img.shape)
-            # print(mask.shape)
+            # print(f'img size: {img.shape}')
+            # print(f'mask size: {mask.shape}')
 
             if(img.shape[0] != 192 or mask.shape[0] != 192):
                 print(f"file: {file}")
